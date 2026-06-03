@@ -68,8 +68,53 @@ const SearchSuggestions = ({ query, visible, onPick }: SearchSuggestionsProps) =
           }
         }
 
-        // Prioritize artists (up to 2) then fill with songs up to 6 total
-        const list: Suggestion[] = [...artists.slice(0, 2), ...songs].slice(0, 6);
+        // Determine if user typed an EXACT artist name (full, no typo)
+        const qLower = q.toLowerCase().trim();
+        const exactArtist = artists.find((a) => a.label.toLowerCase() === qLower);
+
+        // Build interleaved list:
+        // - Top slot: a song (unless user typed an exact artist name → that artist goes first)
+        // - No more than 2 consecutive artists
+        // - Random gap (>=2 songs) between artist groups when possible
+        const list: Suggestion[] = [];
+        const songQueue = [...songs];
+        const artistQueue = artists.filter((a) => !exactArtist || a.label !== exactArtist.label);
+
+        if (exactArtist) {
+          list.push(exactArtist);
+        }
+
+        // Always put at least one song before any (non-exact) artist appears
+        if (songQueue.length > 0) list.push(songQueue.shift()!);
+
+        let consecutiveArtists = list.length > 0 && list[list.length - 1].type === "artist" ? 1 : 0;
+        let songsSinceArtist = list[list.length - 1]?.type === "song" ? 1 : 0;
+        // Random required gap of songs between artist groups (2 or more)
+        const randGap = () => 2 + Math.floor(Math.random() * 2); // 2 or 3
+        let nextArtistAfter = randGap();
+
+        while ((songQueue.length > 0 || artistQueue.length > 0) && list.length < 6) {
+          const canPlaceArtist =
+            artistQueue.length > 0 &&
+            consecutiveArtists < 2 &&
+            (consecutiveArtists > 0 || songsSinceArtist >= nextArtistAfter || songQueue.length === 0);
+
+          if (canPlaceArtist) {
+            list.push(artistQueue.shift()!);
+            consecutiveArtists += 1;
+            songsSinceArtist = 0;
+            if (consecutiveArtists >= 2) {
+              nextArtistAfter = randGap();
+            }
+          } else if (songQueue.length > 0) {
+            list.push(songQueue.shift()!);
+            if (consecutiveArtists > 0) consecutiveArtists = 0;
+            songsSinceArtist += 1;
+          } else {
+            break;
+          }
+        }
+
         setItems(list);
 
         // Fetch real artist photos from Deezer (same system as LyricsSheet/AILabsSheet)

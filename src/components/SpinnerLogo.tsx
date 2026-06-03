@@ -1,4 +1,10 @@
-const GEMINI_URL = "https://static.vecteezy.com/system/resources/thumbnails/055/687/065/small_2x/gemini-google-icon-symbol-logo-free-png.png";
+const GEMINI_URL = "https://www.cloudsky.biz.id/api/file/material-you-loading-1.jpg";
+
+// Preload the loading image once so it doesn't re-fetch every time the spinner mounts
+if (typeof window !== "undefined") {
+  const preload = new Image();
+  preload.src = GEMINI_URL;
+}
 
 interface SpinnerLogoProps {
   size?: number;
