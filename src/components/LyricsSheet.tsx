@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Languages, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Languages, Loader2, AudioLines } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ArtistSong {
@@ -15,6 +15,7 @@ interface LyricsSheetProps {
   onClose: () => void;
   trackTitle?: string;
   trackArtist?: string;
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 const proxyFetch = async (url: string) => {
@@ -23,7 +24,7 @@ const proxyFetch = async (url: string) => {
   return data;
 };
 
-const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: LyricsSheetProps) => {
+const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audioRef }: LyricsSheetProps) => {
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [translatedLyrics, setTranslatedLyrics] = useState<string | null>(null);
@@ -32,6 +33,11 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
   const [artistImage, setArtistImage] = useState<string | null>(null);
   const [artistName, setArtistName] = useState<string | null>(null);
   const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
+  const [syncMode, setSyncMode] = useState(false);
+  const [syncTimings, setSyncTimings] = useState<number[] | null>(null);
+  const [isLoadingSync, setIsLoadingSync] = useState(false);
+  const [currentLineIdx, setCurrentLineIdx] = useState(-1);
+  const activeLineRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
 
   useEffect(() => {
@@ -40,6 +46,9 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
     setArtistImage(null);
     setArtistName(null);
     setArtistSongs([]);
+    setSyncMode(false);
+    setSyncTimings(null);
+    setCurrentLineIdx(-1);
   }, [lyrics]);
 
   // Fetch artist info when lyrics sheet opens
