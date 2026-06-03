@@ -343,12 +343,11 @@ const Index = () => {
     try {
       const searchQ = `${title} ${artist}`.trim();
       const data = await proxyFetch(
-        `https://www.sankavolereii.my.id/search/lirik?apikey=planaai&text=${encodeURIComponent(searchQ)}`
+        `https://opus-dev-v1.vercel.app/api/v1/search/lyric?q=${encodeURIComponent(searchQ)}`
       );
-      if (data.status && data.result) {
-        const result = Array.isArray(data.result) ? data.result[0] : data.result;
-        if (result?.lyrics) { setLyrics(result.lyrics.replace(/\\n/g, "\n")); return; }
-      }
+      const result = Array.isArray(data) ? data[0] : data;
+      const lyric = result?.lirik || result?.lyrics || null;
+      if (lyric) { setLyrics(String(lyric).replace(/\\n/g, "\n")); return; }
       setLyrics(null);
     } catch { setLyrics(null); }
   }, []);
