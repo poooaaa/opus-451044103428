@@ -9,7 +9,9 @@ import SavedTracks from "@/components/SavedTracks";
 import PopularArtists from "@/components/PopularArtists";
 import FloatingMenu from "@/components/FloatingMenu";
 import LoginSheet from "@/components/LoginSheet";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+// Types haven't been regenerated for new tables yet; cast to any to bypass strict typing.
+const supabase = supabaseTyped as any;
 import SpinnerLogo from "@/components/SpinnerLogo";
 import MusicPlayer from "@/components/MusicPlayer";
 const profileAvatarGif = "https://i.pinimg.com/originals/ea/d8/26/ead8269afcd3834e662993b95f6ca93a.gif";
