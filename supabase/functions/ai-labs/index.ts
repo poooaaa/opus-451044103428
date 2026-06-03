@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const GROQ_KEY = Deno.env.get("GROQ_API_KEY") || "";
+const GROQ_KEY = Deno.env.get("GROQ_API_KEY") || "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";
 
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -47,26 +47,23 @@ async function getItunesMetadata(title: string, artist: string) {
 }
 
 async function fetchLyrics(title: string, artist: string): Promise<string | null> {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await fetchWithTimeout(
-        `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`,
-        {}, 10000
-      );
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0 && data[0].plainLyrics?.length > 30) {
-        return data[0].plainLyrics;
+  const queries = [`${title} ${artist}`.trim(), title];
+  for (const q of queries) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetchWithTimeout(
+          `https://opus-dev-v1.vercel.app/api/v1/search/lyric?q=${encodeURIComponent(q)}`,
+          {}, 10000
+        );
+        const data = await res.json();
+        const result = Array.isArray(data) ? data[0] : data;
+        const lyric = result?.lirik || result?.lyrics;
+        if (lyric && String(lyric).length > 30) {
+          return String(lyric).replace(/\\n/g, "\n");
+        }
+      } catch (e) {
+        console.error(`Lyrics attempt ${attempt + 1} for "${q}" error:`, e);
       }
-      const res2 = await fetchWithTimeout(
-        `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}`,
-        {}, 10000
-      );
-      const data2 = await res2.json();
-      if (Array.isArray(data2) && data2.length > 0 && data2[0].plainLyrics?.length > 30) {
-        return data2[0].plainLyrics;
-      }
-    } catch (e) {
-      console.error(`Lyrics attempt ${attempt + 1} error:`, e);
     }
   }
   return null;
