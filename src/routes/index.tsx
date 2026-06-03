@@ -895,11 +895,10 @@ const Index = () => {
   );
 };
 
-export default Index;
-
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Opus Music — Stream & Discover" },
@@ -910,3 +909,5 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
+
+export default Index;
