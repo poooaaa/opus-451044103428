@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Languages, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Languages, Loader2, AudioLines } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ArtistSong {
@@ -15,6 +15,7 @@ interface LyricsSheetProps {
   onClose: () => void;
   trackTitle?: string;
   trackArtist?: string;
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 const proxyFetch = async (url: string) => {
@@ -23,7 +24,7 @@ const proxyFetch = async (url: string) => {
   return data;
 };
 
-const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: LyricsSheetProps) => {
+const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audioRef }: LyricsSheetProps) => {
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [translatedLyrics, setTranslatedLyrics] = useState<string | null>(null);
@@ -32,6 +33,11 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
   const [artistImage, setArtistImage] = useState<string | null>(null);
   const [artistName, setArtistName] = useState<string | null>(null);
   const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
+  const [syncMode, setSyncMode] = useState(false);
+  const [syncTimings, setSyncTimings] = useState<number[] | null>(null);
+  const [isLoadingSync, setIsLoadingSync] = useState(false);
+  const [currentLineIdx, setCurrentLineIdx] = useState(-1);
+  const activeLineRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
 
   useEffect(() => {
@@ -40,6 +46,9 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
     setArtistImage(null);
     setArtistName(null);
     setArtistSongs([]);
+    setSyncMode(false);
+    setSyncTimings(null);
+    setCurrentLineIdx(-1);
   }, [lyrics]);
 
   // Fetch artist info when lyrics sheet opens
@@ -160,6 +169,71 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
     }
   };
 
+  const lyricLines = useMemo(() => (lyrics ? lyrics.split("\n") : []), [lyrics]);
+  const nonBlankIdxs = useMemo(() => {
+    const arr: number[] = [];
+    lyricLines.forEach((l, i) => { if (l.trim()) arr.push(i); });
+    return arr;
+  }, [lyricLines]);
+
+  const handleSync = async () => {
+    if (syncMode) { setSyncMode(false); return; }
+    if (syncTimings) { setSyncMode(true); return; }
+    if (!trackTitle) return;
+    setIsLoadingSync(true);
+    try {
+      const res = await fetch(
+        `https://lrclib.net/api/search?track_name=${encodeURIComponent(trackTitle)}&artist_name=${encodeURIComponent(trackArtist || "")}`
+      );
+      const data = await res.json();
+      const hit = Array.isArray(data) ? data.find((d: any) => d?.syncedLyrics) : null;
+      const synced: string | undefined = hit?.syncedLyrics;
+      if (!synced) throw new Error("No synced lyrics");
+      const times: number[] = [];
+      for (const raw of synced.split("\n")) {
+        const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+        if (!m) continue;
+        if (!m[3].trim()) continue; // skip blank-text timestamps to avoid the 1-line offset bug
+        times.push(parseInt(m[1], 10) * 60 + parseFloat(m[2]));
+      }
+      if (times.length === 0) throw new Error("No timings");
+      setSyncTimings(times);
+      setSyncMode(true);
+    } catch (e) {
+      console.error("Sync lyrics error:", e);
+    } finally {
+      setIsLoadingSync(false);
+    }
+  };
+
+  // Poll audio currentTime while in sync mode
+  useEffect(() => {
+    if (!syncMode || !syncTimings || !audioRef?.current) return;
+    let raf = 0;
+    const tick = () => {
+      const audio = audioRef.current;
+      if (audio) {
+        const t = audio.currentTime + 1; // sync 1 second earlier
+        let idx = -1;
+        for (let i = 0; i < syncTimings.length; i++) {
+          if (syncTimings[i] <= t) idx = i;
+          else break;
+        }
+        setCurrentLineIdx((prev) => (prev === idx ? prev : idx));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [syncMode, syncTimings, audioRef]);
+
+  // Auto-scroll active line into view
+  useEffect(() => {
+    if (syncMode && activeLineRef.current) {
+      activeLineRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [currentLineIdx, syncMode]);
+
   if (!isVisible) return null;
 
   return (
@@ -187,9 +261,35 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line pt-4">
-                {showTranslated && translatedLyrics ? translatedLyrics : lyrics}
-              </p>
+              {syncMode && !showTranslated ? (
+                <div className="pt-4">
+                  {lyricLines.map((line, i) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) {
+                      return <div key={i} className="text-xs leading-relaxed">&nbsp;</div>;
+                    }
+                    const nbi = nonBlankIdxs.indexOf(i);
+                    const isActive = nbi === currentLineIdx;
+                    return (
+                      <div
+                        key={i}
+                        ref={isActive ? activeLineRef : undefined}
+                        className="text-xs leading-relaxed text-muted-foreground"
+                      >
+                        {isActive ? (
+                          <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{line}</span>
+                        ) : (
+                          line
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line pt-4">
+                  {showTranslated && translatedLyrics ? translatedLyrics : lyrics}
+                </p>
+              )}
 
               {/* Artist image + songs */}
               {(artistImage || artistSongs.length > 0) && (
@@ -220,9 +320,20 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist }: Ly
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={handleSync}
+                    disabled={isLoadingSync}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground opacity-60 transition-colors"
+                  >
+                    {isLoadingSync ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <AudioLines className={`w-3.5 h-3.5 ${syncMode ? "text-primary opacity-100" : ""}`} />
+                    )}
+                  </button>
+                  <button
                     onClick={handleTranslate}
                     disabled={isTranslating}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground/60 transition-colors"
+                    className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground opacity-60 transition-colors"
                   >
                     {isTranslating ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

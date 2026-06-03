@@ -831,6 +831,7 @@ const Index = () => {
           onClose={() => setShowLyrics(false)} 
           trackTitle={lyricsTrack?.title?.replace(/^.+\s-\s/, "") || ""}
           trackArtist={lyricsTrack?.artist || ""}
+          audioRef={audioRef}
         />
 
         <AILabsSheet

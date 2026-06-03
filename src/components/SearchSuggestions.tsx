@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import SpinnerLogo from "@/components/SpinnerLogo";
 
 interface Suggestion {
   label: string;
@@ -166,7 +167,11 @@ const SearchSuggestions = ({ query, visible, onPick }: SearchSuggestionsProps) =
               />
             ) : (
               <div className={`w-[37px] h-[37px] ${shapeClass} bg-secondary flex items-center justify-center flex-shrink-0 ${isArtist ? "border border-border/30" : ""}`}>
-                <Search className="w-4 h-4 text-muted-foreground" />
+                {isArtist ? (
+                  <SpinnerLogo size={22} />
+                ) : (
+                  <Search className="w-4 h-4 text-muted-foreground" />
+                )}
               </div>
             )}
             <div className="min-w-0 flex-1">
