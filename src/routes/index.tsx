@@ -300,7 +300,7 @@ const Index = () => {
         const ytQuery = `${ytArtist} ${ytTitle} official music`.trim();
         supabase.functions.invoke("youtube-proxy", {
           body: { action: "search", query: ytQuery },
-        }).then(({ data }) => {
+        }).then(({ data }: any) => {
           const results = data?.results || data?.data || data?.result || [];
           // Score results by title similarity
           const searchLower = `${ytArtist} ${ytTitle}`.toLowerCase();
