@@ -267,29 +267,33 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              {syncMode && !showTranslated ? (
+              {syncMode ? (
                 <div className="pt-4">
-                  {lyricLines.map((line, i) => {
-                    const trimmed = line.trim();
-                    if (!trimmed) {
-                      return <div key={i} className="text-xs leading-relaxed">&nbsp;</div>;
-                    }
-                    const nbi = nonBlankIdxs.indexOf(i);
-                    const isActive = nbi === currentLineIdx;
-                    return (
-                      <div
-                        key={i}
-                        ref={isActive ? activeLineRef : undefined}
-                        className="text-xs leading-relaxed text-muted-foreground"
-                      >
-                        {isActive ? (
-                          <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{line}</span>
-                        ) : (
-                          line
-                        )}
-                      </div>
-                    );
-                  })}
+                  {(() => {
+                    const translatedLines = (showTranslated && translatedLyrics) ? translatedLyrics.split("\n") : null;
+                    return lyricLines.map((line, i) => {
+                      const trimmed = line.trim();
+                      const display = translatedLines && translatedLines[i] !== undefined ? translatedLines[i] : line;
+                      if (!trimmed) {
+                        return <div key={i} className="text-xs leading-relaxed">&nbsp;</div>;
+                      }
+                      const nbi = nonBlankIdxs.indexOf(i);
+                      const isActive = nbi === currentLineIdx;
+                      return (
+                        <div
+                          key={i}
+                          ref={isActive ? activeLineRef : undefined}
+                          className="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {isActive ? (
+                            <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{display}</span>
+                          ) : (
+                            display
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line pt-4">
