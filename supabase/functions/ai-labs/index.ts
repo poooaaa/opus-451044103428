@@ -85,21 +85,21 @@ async function summarizeMeaning(lyrics: string, title: string, artist: string): 
           messages: [
             {
               role: "system",
-              content: `Kamu adalah pengamat musik profesional yang jujur dan blak-blakan. Tugas kamu adalah menjelaskan makna sebenarnya dari lirik lagu yang diberikan. Jawab dalam bahasa Indonesia. ATURAN KETAT:
-1. LANGSUNG jelaskan isi ceritanya tanpa basa-basi
-2. JANGAN PERNAH mengawali dengan "Lagu ini", "Menceritakan tentang", atau frasa pembuka apapun
+              content: `Kamu adalah pengamat musik profesional yang jujur, objektif, dan blak-blakan. Tugas kamu menjelaskan judul lagu dan makna liriknya. Jawab dalam bahasa Indonesia. ATURAN KETAT:
+1. Mulai dengan SATU kalimat singkat yang menjelaskan secara objektif makna atau referensi dari JUDUL lagu (apa yang dimaksud judulnya, dari mana asalnya, atau apa yang disimbolkannya). Awali dengan "Judulnya merujuk pada..." atau "Judul ini menggambarkan..."
+2. Setelah itu lanjutkan dengan 2 kalimat tentang inti cerita lirik. Awali bagian ini dengan kalimat baru — JANGAN gunakan "Lagu ini" atau "Menceritakan tentang"
 3. JANGAN menyensor atau menghaluskan makna lagu. Jelaskan APA ADANYA termasuk tema gelap seperti kematian, keputusasaan, bunuh diri, kekerasan, seks, narkoba, dll. Kamu BUKAN sensor, kamu pengamat musik
 4. JANGAN menambahkan peringatan, disclaimer, atau catatan moral
-5. PENTING: Subjek lagu TIDAK selalu manusia. Bisa tentang benda (mobil, rumah, uang, kota, makanan), hewan, alam (laut, langit, hujan), konsep abstrak (waktu, mimpi, kebebasan), tempat, atau peristiwa. Identifikasi subjek sebenarnya dari lirik dan jelaskan dengan tepat — JANGAN paksakan sudut pandang "seseorang" jika lagu sebenarnya tentang hal lain
-6. Langsung mulai dari inti ceritanya sesuai subjeknya. Contoh untuk manusia: "Seseorang yang merasa...". Contoh untuk benda: "Sebuah kota yang...". Contoh untuk konsep: "Waktu yang berlalu..."
-7. Maksimal 3 kalimat saja`
+5. PENTING: Subjek lagu TIDAK selalu manusia. Bisa tentang benda, hewan, alam, konsep abstrak, tempat, atau peristiwa. Identifikasi subjek sebenarnya dari lirik dan jelaskan dengan tepat
+6. Tetap objektif — jelaskan apa yang ada, bukan opini pribadi
+7. Total maksimal 3 kalimat`
             },
             {
               role: "user",
               content: `Lirik lagu "${title}" oleh ${artist}:\n\n${lyrics.slice(0, 2000)}`
             }
           ],
-          max_tokens: 300,
+          max_tokens: 400,
           temperature: 0.5,
         }),
       }, 15000);
@@ -107,16 +107,6 @@ async function summarizeMeaning(lyrics: string, title: string, artist: string): 
       const data = await res.json();
       let text = data?.choices?.[0]?.message?.content?.trim();
       if (text && text.length > 10) {
-        // Aggressively clean any prefix patterns
-        text = text.replace(/^[Ll]agu\s+(ini\s+)?menceritakan\s+tentang\s*/i, '');
-        text = text.replace(/^[Mm]enceritakan\s+tentang\s*/i, '');
-        text = text.replace(/^[Ll]agu\s+ini\s*/i, '');
-        text = text.replace(/^[Ll]agu\s+"[^"]*"\s*(oleh\s+[^\s]+\s+)?menceritakan\s+tentang\s*/i, '');
-        text = text.replace(/^[Tt]entang\s*/i, '');
-        text = text.replace(/^[Cc]erita\s*/i, '');
-        // Remove any remaining "menceritakan tentang" that might appear
-        text = text.replace(/menceritakan tentang\s*/gi, '');
-        // Capitalize first letter
         text = text.charAt(0).toUpperCase() + text.slice(1);
         return text;
       }
@@ -205,12 +195,8 @@ Deno.serve(async (req) => {
     // Get artist's other songs
     const artistSongs = await getArtistTopSongs(itunesData.artistId, itunesData.artist);
 
-    // Build summary - meaning already cleaned, no prefix needed in meaning itself
-    // Clean meaning one more time to avoid "cerita" or leftover patterns
-    let cleanMeaning = meaning.charAt(0).toLowerCase() + meaning.slice(1);
-    cleanMeaning = cleanMeaning.replace(/^cerita\s*/i, '');
-    cleanMeaning = cleanMeaning.replace(/^menceritakan tentang\s*/gi, '');
-    const summary = `lagu ${itunesData.song} adalah lagu yang diciptakan oleh ${itunesData.artist} pada ${itunesData.releaseDate}, lagu ini bergenre ${itunesData.genre}. lagu ini menceritakan tentang ${cleanMeaning}`;
+    // Build summary — `meaning` now contains title explanation + story
+    const summary = `Lagu "${itunesData.song}" diciptakan oleh ${itunesData.artist} dan dirilis pada ${itunesData.releaseDate} dengan genre ${itunesData.genre}. ${meaning}`;
 
     return new Response(JSON.stringify({ summary, artistImage: artistPhoto, artistName: itunesData.artist, artistSongs }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
