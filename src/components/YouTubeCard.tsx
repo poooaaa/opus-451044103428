@@ -78,7 +78,7 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
       >
         {isPlaying && videoId ? (
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=0&vq=hd720&hd=1`}
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=1`}
             className="w-full h-full block border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
