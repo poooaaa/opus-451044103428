@@ -114,25 +114,14 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
         onClick={handleClick}
       >
         {isPlaying && videoId ? (
-          <>
-            <iframe
-              ref={iframeRef}
-              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=0&vq=hd720&hd=1&enablejsapi=1&origin=${encodeURIComponent(origin)}`}
-              className="w-full h-full block border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              title={video.title}
-            />
-            {/* Cover YouTube's "share" and "watch later" overlay buttons shown on paused state */}
-            <div
-              className="absolute pointer-events-none bg-black"
-              style={{ left: "10%", right: "55%", top: "40%", height: "30%" }}
-            />
-            <div
-              className="absolute pointer-events-none bg-black"
-              style={{ left: "40%", right: "25%", top: "35%", height: "40%" }}
-            />
-          </>
+          <iframe
+            ref={iframeRef}
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&vq=hd720&hd=1&enablejsapi=1&origin=${encodeURIComponent(origin)}`}
+            className="w-full h-full block border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            title={video.title}
+          />
         ) : (
           <>
             <img
