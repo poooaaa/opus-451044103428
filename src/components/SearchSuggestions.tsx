@@ -69,6 +69,19 @@ const SearchSuggestions = ({ query, visible, onPick }: SearchSuggestionsProps) =
           }
         }
 
+        // Ensure at least 1 artist by deriving from a song's artistName
+        if (artists.length === 0 && songs.length > 0) {
+          for (const r of results) {
+            if ((r.kind === "song" || r.wrapperType === "track") && r.artistName) {
+              const key = `artist::${r.artistName.toLowerCase()}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              artists.push({ label: r.artistName, query: r.artistName, type: "artist" });
+              break;
+            }
+          }
+        }
+
         // Determine if user typed an EXACT artist name (full, no typo)
         const qLower = q.toLowerCase().trim();
         const exactArtist = artists.find((a) => a.label.toLowerCase() === qLower);
