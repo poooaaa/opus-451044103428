@@ -107,7 +107,7 @@ const SearchSuggestions = ({ query, visible, onPick }: SearchSuggestionsProps) =
         const randGap = () => 2 + Math.floor(Math.random() * 2); // 2 or 3
         let nextArtistAfter = randGap();
 
-        while ((songQueue.length > 0 || artistQueue.length > 0) && list.length < 6) {
+        while (songQueue.length > 0 || artistQueue.length > 0) {
           const canPlaceArtist =
             artistQueue.length > 0 &&
             consecutiveArtists < 2 &&
