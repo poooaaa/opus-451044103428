@@ -33,16 +33,53 @@ import { supabase } from "@/integrations/supabase/client";
 const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  // Keep latest onPlayStart in a ref to avoid stale closures
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const onPlayStartRef = useRef(onPlayStart);
   onPlayStartRef.current = onPlayStart;
 
-  // Stop the iframe when an external signal changes (e.g. user plays music)
   useEffect(() => {
     if (stopSignal === undefined) return;
     setIsPlaying(false);
     setIsLoading(false);
   }, [stopSignal]);
+
+  // Force quality to 720p (falls back to best available if 720p missing)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const send = (func: string, args: any[] = []) => {
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: "command", func, args }),
+          "*"
+        );
+      } catch {}
+    };
+    const onMessage = (e: MessageEvent) => {
+      if (typeof e.data !== "string") return;
+      try {
+        const data = JSON.parse(e.data);
+        if (data?.event === "onReady" || data?.event === "onStateChange") {
+          send("setPlaybackQuality", ["hd720"]);
+        }
+      } catch {}
+    };
+    window.addEventListener("message", onMessage);
+    const handshake = () => {
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: "listening" }),
+          "*"
+        );
+      } catch {}
+    };
+    const t1 = setTimeout(handshake, 400);
+    const t2 = setTimeout(() => send("setPlaybackQuality", ["hd720"]), 1500);
+    const t3 = setTimeout(() => send("setPlaybackQuality", ["hd720"]), 4000);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+    };
+  }, [isPlaying]);
 
   const getVideoId = (url: string): string | null => {
     try {
@@ -61,7 +98,6 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
     if (isPlaying) return;
     if (isLoading) return;
     setIsLoading(true);
-    // Simulate brief loading like the previous server-download flow
     await new Promise((r) => setTimeout(r, 600));
     onPlayStartRef.current?.();
     setIsPlaying(true);
@@ -69,6 +105,7 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
   }, [isPlaying, isLoading]);
 
   const videoId = getVideoId(video.url);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   return (
     <div className="w-full animate-fade-in-up">
@@ -77,13 +114,25 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
         onClick={handleClick}
       >
         {isPlaying && videoId ? (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=0&vq=hd720&hd=1`}
-            className="w-full h-full block border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            title={video.title}
-          />
+          <>
+            <iframe
+              ref={iframeRef}
+              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=0&vq=hd720&hd=1&enablejsapi=1&origin=${encodeURIComponent(origin)}`}
+              className="w-full h-full block border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              title={video.title}
+            />
+            {/* Cover YouTube's "share" and "watch later" overlay buttons shown on paused state */}
+            <div
+              className="absolute pointer-events-none bg-black"
+              style={{ left: "10%", right: "55%", top: "40%", height: "30%" }}
+            />
+            <div
+              className="absolute pointer-events-none bg-black"
+              style={{ left: "40%", right: "25%", top: "35%", height: "40%" }}
+            />
+          </>
         ) : (
           <>
             <img
@@ -97,7 +146,6 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
                 <SpinnerLogo size={36} />
               </div>
             )}
-            {/* Duration */}
             <div className="absolute bottom-0 right-0 mb-2 mr-2 bg-background/90 backdrop-blur-md border border-border px-2 py-1 rounded-lg z-10">
               <span className="text-[9px] text-foreground leading-none block">
                 {formatYTDuration(video.duration)}
