@@ -26,6 +26,8 @@ const AILabsSheet = ({ isVisible, onClose, summary, artistImage, artistName, art
   const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslated, setShowTranslated] = useState(false);
+  const [translateLabel, setTranslateLabel] = useState<null | "Id" | "En">(null);
+  const [isSwitchingLabel, setIsSwitchingLabel] = useState(false);
   const [summarizedText, setSummarizedText] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [showSummarized, setShowSummarized] = useState(false);
@@ -37,6 +39,8 @@ const AILabsSheet = ({ isVisible, onClose, summary, artistImage, artistName, art
     setShowTranslated(false);
     setSummarizedText(null);
     setShowSummarized(false);
+    setTranslateLabel(null);
+    setIsSwitchingLabel(false);
   }, [summary]);
 
   const handleDragStart = useCallback((clientY: number) => {
@@ -98,12 +102,13 @@ const AILabsSheet = ({ isVisible, onClose, summary, artistImage, artistName, art
 
   const handleTranslate = async () => {
     if (!summary) return;
-    if (showTranslated && translatedSummary) {
-      setShowTranslated(false);
-      return;
-    }
     if (translatedSummary) {
-      setShowTranslated(true);
+      setIsSwitchingLabel(true);
+      setTimeout(() => {
+        setShowTranslated((prev) => !prev);
+        setTranslateLabel((prev) => (prev === "Id" ? "En" : "Id"));
+        setIsSwitchingLabel(false);
+      }, 1000);
       return;
     }
 
@@ -118,6 +123,7 @@ const AILabsSheet = ({ isVisible, onClose, summary, artistImage, artistName, art
       if (error) throw error;
       setTranslatedSummary(data.translated);
       setShowTranslated(true);
+      setTranslateLabel("Id");
     } catch (e) {
       console.error("Translation error:", e);
     } finally {
@@ -252,11 +258,13 @@ const AILabsSheet = ({ isVisible, onClose, summary, artistImage, artistName, art
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleTranslate}
-                      disabled={isTranslating}
+                      disabled={isTranslating || isSwitchingLabel}
                       className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground/60 transition-colors"
                     >
-                      {isTranslating ? (
+                      {isTranslating || isSwitchingLabel ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : translateLabel ? (
+                        <span className="text-[11px] font-semibold leading-none">{translateLabel}</span>
                       ) : (
                         <Languages className="w-3.5 h-3.5" />
                       )}
