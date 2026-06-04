@@ -23,7 +23,7 @@ const ActionIcon = ({ Icon, active }: { Icon: typeof Bookmark; active: boolean }
   <Icon
     size={16}
     fill={active ? "currentColor" : "none"}
-    strokeWidth={active ? 0 : 2}
+    strokeWidth={2}
   />
 );
 
