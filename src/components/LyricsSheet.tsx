@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Languages, Loader2, AudioLines } from "lucide-react";
+import { Languages, Loader2, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ArtistSong {
@@ -37,6 +37,8 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
   const [syncTimings, setSyncTimings] = useState<number[] | null>(null);
   const [isLoadingSync, setIsLoadingSync] = useState(false);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
+  const [translateLabel, setTranslateLabel] = useState<null | "Id" | "En">(null);
+  const [isSwitchingLabel, setIsSwitchingLabel] = useState(false);
   const activeLineRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
 
@@ -49,6 +51,8 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
     setSyncMode(false);
     setSyncTimings(null);
     setCurrentLineIdx(-1);
+    setTranslateLabel(null);
+    setIsSwitchingLabel(false);
   }, [lyrics]);
 
   // Fetch artist info when lyrics sheet opens
@@ -143,25 +147,27 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
 
   const handleTranslate = async () => {
     if (!lyrics) return;
-    const currentText = showTranslated && translatedLyrics ? translatedLyrics : lyrics;
-    if (showTranslated && translatedLyrics) {
-      setShowTranslated(false);
-      return;
-    }
+    // Subsequent toggles: just show 1s spinner then flip label/view
     if (translatedLyrics) {
-      setShowTranslated(true);
+      setIsSwitchingLabel(true);
+      setTimeout(() => {
+        setShowTranslated((prev) => !prev);
+        setTranslateLabel((prev) => (prev === "Id" ? "En" : "Id"));
+        setIsSwitchingLabel(false);
+      }, 1000);
       return;
     }
 
     setIsTranslating(true);
     try {
-      const targetLang = detectLanguage(currentText);
+      const targetLang = detectLanguage(lyrics);
       const { data, error } = await supabase.functions.invoke("translate", {
         body: { text: lyrics, targetLang },
       });
       if (error) throw error;
       setTranslatedLyrics(data.translated);
       setShowTranslated(true);
+      setTranslateLabel("Id");
     } catch (e) {
       console.error("Translation error:", e);
     } finally {
@@ -326,17 +332,26 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
                   >
                     {isLoadingSync ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : syncMode ? (
+                      <Check className="w-3.5 h-3.5" />
                     ) : (
-                      <AudioLines className={`w-3.5 h-3.5 ${syncMode ? "text-primary opacity-100" : ""}`} />
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: 16, lineHeight: 1 }}
+                      >
+                        podcasts
+                      </span>
                     )}
                   </button>
                   <button
                     onClick={handleTranslate}
-                    disabled={isTranslating}
+                    disabled={isTranslating || isSwitchingLabel}
                     className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground opacity-60 transition-colors"
                   >
-                    {isTranslating ? (
+                    {isTranslating || isSwitchingLabel ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : translateLabel ? (
+                      <span className="text-[11px] font-semibold leading-none">{translateLabel}</span>
                     ) : (
                       <Languages className="w-3.5 h-3.5" />
                     )}
