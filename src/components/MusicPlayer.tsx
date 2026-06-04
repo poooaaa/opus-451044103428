@@ -1,15 +1,16 @@
-import { Play, Pause, X } from "lucide-react";
+import { Play, Pause, X, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { type Track } from "@/components/TrackCard";
 
 interface MusicPlayerProps {
   track: Track;
   isPlaying: boolean;
+  isLoading?: boolean;
   onTogglePlay: () => void;
   onClose: () => void;
 }
 
-const MusicPlayer = ({ track, isPlaying, onTogglePlay, onClose }: MusicPlayerProps) => {
+const MusicPlayer = ({ track, isPlaying, isLoading, onTogglePlay, onClose }: MusicPlayerProps) => {
   const displayTitle = track.title.includes(" - ")
     ? track.title.split(" - ").slice(1).join(" - ")
     : track.title;
@@ -83,12 +84,14 @@ const MusicPlayer = ({ track, isPlaying, onTogglePlay, onClose }: MusicPlayerPro
         <div className="flex items-center gap-0 flex-shrink-0">
           <button
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onTogglePlay(); }}
+            onClick={(e) => { e.stopPropagation(); if (!isLoading) onTogglePlay(); }}
             className="w-9 h-9 flex items-center justify-center rounded-full"
             aria-label={isPlaying ? "Pause" : "Play"}
             style={{ WebkitTapHighlightColor: "transparent" }}
           >
-            {isPlaying ? (
+            {isLoading ? (
+              <Loader2 size={20} className="text-foreground animate-spin" strokeWidth={2.5} />
+            ) : isPlaying ? (
               <Pause size={20} className="text-foreground" style={{ fill: "currentColor", strokeWidth: 0 }} />
             ) : (
               <Play size={20} className="text-foreground" style={{ fill: "currentColor", strokeWidth: 0 }} />
