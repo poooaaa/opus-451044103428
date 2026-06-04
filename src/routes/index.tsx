@@ -795,6 +795,7 @@ const Index = () => {
           <MusicPlayer
             track={currentTrack}
             isPlaying={!!playingTrackUrl && playingTrackUrl === currentTrack.track_url}
+            isLoading={!!loadingTrackUrl && loadingTrackUrl === currentTrack.track_url}
             onTogglePlay={() => {
               const audio = audioRef.current;
               if (!audio) return;
@@ -814,6 +815,9 @@ const Index = () => {
                 audio.removeAttribute("src");
                 audio.load();
               }
+              // Cancel any in-flight playback request so loading state stops
+              playbackRequestIdRef.current += 1;
+              setLoadingTrackUrl(null);
               setPlayingTrackUrl(null);
               setCurrentTrack(null);
               setRemainingTime(null);
