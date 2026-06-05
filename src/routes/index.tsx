@@ -353,38 +353,32 @@ const Index = () => {
     } catch { setLyrics(null); }
   }, []);
 
-  const cacheMP3InBackground = useCallback((downloadUrl: string, trackUrl: string) => {
-    const cacheKey = hashString(trackUrl) + ".mp3";
-    supabase.functions.invoke("cache-mp3", {
-      body: { downloadUrl, cacheKey },
-    }).catch(() => {});
-  }, []);
-
-  const getCachedUrl = useCallback((trackUrl: string): string => {
-    const cacheKey = hashString(trackUrl) + ".mp3";
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    return `${supabaseUrl}/storage/v1/object/public/mp3-cache/${cacheKey}`;
-  }, []);
-
-  // Search Apple Music for a song title and return a playable Apple Music track
-  const findAppleMusicFallback = useCallback(async (track: Track): Promise<string | null> => {
+  // Search YouTube via youtube-search-api (server-side) for the best matching video ID
+  const findYouTubeVideoId = useCallback(async (track: Track): Promise<string | null> => {
     try {
-      const searchTerm = track.title.replace(/^.+\s-\s/, "") + " " + (track.artist || "");
-      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&entity=song&limit=1`);
-      const data = await res.json();
-      if (data?.results?.[0]?.trackViewUrl) {
-        const appleUrl = data.results[0].trackViewUrl;
-        const dlData = await proxyFetch(
-          `https://www.neoapis.xyz/api/downloader/applemusic?url=${encodeURIComponent(appleUrl)}`
-        );
-        if (dlData?.data?.download_url) {
-          return dlData.data.download_url;
-        }
-      }
-    } catch (e) {
-      console.error("Apple Music fallback error:", e);
+      const cleanTitle = track.title.replace(/^.+\s-\s/, "").trim();
+      const artist = (track.artist || "").trim();
+      const query = `${artist} ${cleanTitle} audio`.trim();
+      const { data, error } = await supabase.functions.invoke("youtube-search", {
+        body: { query },
+      });
+      if (error) return null;
+      const items: any[] = data?.items || [];
+      if (items.length === 0) return null;
+
+      // Score by matching tokens in title
+      const ref = `${artist} ${cleanTitle}`.toLowerCase();
+      const words = ref.split(/\s+/).filter((w) => w.length > 2);
+      const scored = items.map((it) => {
+        const t = (it.title || "").toLowerCase();
+        const matches = words.filter((w) => t.includes(w)).length;
+        return { it, score: matches };
+      }).sort((a, b) => b.score - a.score);
+
+      return scored[0]?.it?.id || items[0]?.id || null;
+    } catch {
+      return null;
     }
-    return null;
   }, []);
 
   const handlePlayTrack = useCallback(async (track: Track) => {
@@ -401,14 +395,12 @@ const Index = () => {
       return;
     }
 
-    // Pause any playing YouTube video (don't destroy it)
+    // Pause any playing YouTube preview cards (don't destroy them)
     document.querySelectorAll("video").forEach(v => { v.pause(); });
-    // Signal YouTubeCard iframes to fully stop (iframes are not <video>)
     setYoutubeStopSignal((n) => n + 1);
 
     audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
+    audio.unload();
     setPlayingTrackUrl(null);
     setLoadingTrackUrl(track.track_url);
     setRemainingTime(null);
@@ -416,77 +408,30 @@ const Index = () => {
 
     playbackRequestIdRef.current += 1;
     const requestId = playbackRequestIdRef.current;
-
     const isStaleRequest = () => playbackRequestIdRef.current !== requestId;
 
-    const startPlayback = async (sourceUrl: string, cacheSourceUrl?: string) => {
-      if (isStaleRequest()) return false;
+    try {
+      const videoId = await findYouTubeVideoId(track);
+      if (isStaleRequest()) return;
 
-      audio.pause();
-      audio.src = sourceUrl;
-      await audio.play();
+      if (!videoId) {
+        if (!isStaleRequest()) alert("Gagal menemukan audio untuk lagu ini");
+        return;
+      }
 
+      await audio.load(videoId);
       if (isStaleRequest()) {
         audio.pause();
-        return false;
+        return;
+      }
+      await audio.play();
+      if (isStaleRequest()) {
+        audio.pause();
+        return;
       }
 
       setPlayingTrackUrl(track.track_url);
       setCurrentTrack(track);
-
-      if (cacheSourceUrl) {
-        cacheMP3InBackground(cacheSourceUrl, track.track_url);
-      }
-
-      return true;
-    };
-
-    try {
-      const cachedUrl = getCachedUrl(track.track_url);
-      let played = false;
-
-      try {
-        const headRes = await fetch(cachedUrl, { method: "HEAD" });
-        if (!isStaleRequest() && headRes.ok) {
-          played = await startPlayback(cachedUrl);
-        }
-      } catch {}
-
-      if (!played && track.source === "spotify") {
-        // Primary: harzrestapi.web.id (direct MP3 download, no JSON)
-        try {
-          const directUrl = `https://api.harzrestapi.web.id/api/spotify?url=${encodeURIComponent(track.track_url)}`;
-          if (!isStaleRequest()) {
-            played = await startPlayback(directUrl, directUrl);
-          }
-        } catch {}
-
-        // Fallback: Search Apple Music with same title
-        if (!played) {
-          try {
-            const appleUrl = await findAppleMusicFallback(track);
-            if (!isStaleRequest() && appleUrl) {
-              played = await startPlayback(appleUrl, appleUrl);
-            }
-          } catch {}
-        }
-
-        if (!played && !isStaleRequest()) alert("Gagal memutar lagu Spotify");
-      } else if (!played) {
-        // Apple Music: neoapis.xyz
-        try {
-          const data = await proxyFetch(
-            `https://www.neoapis.xyz/api/downloader/applemusic?url=${encodeURIComponent(track.track_url)}`
-          );
-          if (!isStaleRequest() && data?.data?.download_url) {
-            played = await startPlayback(data.data.download_url, data.data.download_url);
-          }
-        } catch {}
-
-        if (!played && !isStaleRequest()) alert("Gagal memutar lagu");
-      }
-
-      if (isStaleRequest() || !played) return;
 
       // Google ring tracking - any song counts
       if (user) {
@@ -508,7 +453,7 @@ const Index = () => {
         setLoadingTrackUrl(null);
       }
     }
-  }, [playingTrackUrl, user, totalPlays, getCachedUrl, cacheMP3InBackground, findAppleMusicFallback]);
+  }, [playingTrackUrl, user, totalPlays, findYouTubeVideoId]);
 
   // Play saved track with auto-play queue — use current savedTracks order
   const handlePlaySavedTrack = useCallback((track: Track) => {
