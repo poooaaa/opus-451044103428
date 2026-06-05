@@ -62,7 +62,7 @@ const Index = () => {
   const [loadingTrackUrl, setLoadingTrackUrl] = useState<string | null>(null);
   const [remainingTime, setRemainingTime] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<YTAudioHandle | null>(null);
   const playbackRequestIdRef = useRef(0);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
