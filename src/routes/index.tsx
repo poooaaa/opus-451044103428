@@ -14,6 +14,7 @@ import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 const supabase = supabaseTyped as any;
 import SpinnerLogo from "@/components/SpinnerLogo";
 import MusicPlayer from "@/components/MusicPlayer";
+import YouTubeAudio, { type YTAudioHandle } from "@/components/YouTubeAudio";
 const profileAvatarGif = "https://i.pinimg.com/originals/ea/d8/26/ead8269afcd3834e662993b95f6ca93a.gif";
 
 const POPULAR_ARTISTS = [
