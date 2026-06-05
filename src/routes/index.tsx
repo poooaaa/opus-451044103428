@@ -525,40 +525,38 @@ const Index = () => {
     setShowAILabs(true);
   }, [menuState, showAILabs, isLoadingAILabs, user]);
 
-  // Audio events with auto-advance for saved tracks
-  useEffect(() => {
+  // Audio event callbacks (passed to YouTubeAudio)
+  const handleAudioTimeUpdate = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    const onTimeUpdate = () => {
-      if (currentTrack) {
-        const durationMs = currentTrack.duration_ms > 0 ? currentTrack.duration_ms : parseDurationToMs(currentTrack.duration);
-        const remainingMs = durationMs - audio.currentTime * 1000;
-        setRemainingTime(formatTime(remainingMs));
-      }
-    };
-    const onEnded = () => {
-      // Auto-play next in saved tracks queue
-      if (autoPlayQueue.length > 0 && autoPlayIndex >= 0 && autoPlayIndex < autoPlayQueue.length - 1) {
-        const nextIndex = autoPlayIndex + 1;
-        setAutoPlayIndex(nextIndex);
-        const nextTrack = autoPlayQueue[nextIndex];
-        setCurrentTrack(nextTrack);
-        handlePlayTrack(nextTrack);
-        return;
-      }
+    if (!audio || !currentTrack) return;
+    let durationMs = currentTrack.duration_ms > 0
+      ? currentTrack.duration_ms
+      : parseDurationToMs(currentTrack.duration);
+    if (!durationMs && audio.duration > 0) {
+      durationMs = Math.floor(audio.duration * 1000);
+    }
+    if (!durationMs) return;
+    const remainingMs = durationMs - audio.currentTime * 1000;
+    setRemainingTime(formatTime(remainingMs));
+  }, [currentTrack]);
 
-      setPlayingTrackUrl(null);
-      setRemainingTime(null);
-      setCurrentTrack(null);
-      setShowLyrics(false);
-      setShowAILabs(false);
-      setAutoPlayQueue([]);
-      setAutoPlayIndex(-1);
-    };
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("ended", onEnded);
-    return () => { audio.removeEventListener("timeupdate", onTimeUpdate); audio.removeEventListener("ended", onEnded); };
-  }, [currentTrack, autoPlayQueue, autoPlayIndex, handlePlayTrack]);
+  const handleAudioEnded = useCallback(() => {
+    if (autoPlayQueue.length > 0 && autoPlayIndex >= 0 && autoPlayIndex < autoPlayQueue.length - 1) {
+      const nextIndex = autoPlayIndex + 1;
+      setAutoPlayIndex(nextIndex);
+      const nextTrack = autoPlayQueue[nextIndex];
+      setCurrentTrack(nextTrack);
+      handlePlayTrack(nextTrack);
+      return;
+    }
+    setPlayingTrackUrl(null);
+    setRemainingTime(null);
+    setCurrentTrack(null);
+    setShowLyrics(false);
+    setShowAILabs(false);
+    setAutoPlayQueue([]);
+    setAutoPlayIndex(-1);
+  }, [autoPlayQueue, autoPlayIndex, handlePlayTrack]);
 
   // Google ring expiry check
   useEffect(() => {
