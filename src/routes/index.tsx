@@ -741,7 +741,7 @@ const Index = () => {
             </>
         )}
 
-        <audio ref={audioRef} className="hidden" />
+        <YouTubeAudio ref={audioRef} onEnded={handleAudioEnded} onTimeUpdate={handleAudioTimeUpdate} />
 
         {currentTrack && (
           <MusicPlayer
