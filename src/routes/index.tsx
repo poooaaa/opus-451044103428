@@ -764,8 +764,7 @@ const Index = () => {
               const audio = audioRef.current;
               if (audio) {
                 audio.pause();
-                audio.removeAttribute("src");
-                audio.load();
+                audio.unload();
               }
               // Cancel any in-flight playback request so loading state stops
               playbackRequestIdRef.current += 1;
