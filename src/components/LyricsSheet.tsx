@@ -9,13 +9,17 @@ interface ArtistSong {
   trackUrl: string;
 }
 
+interface AudioLike {
+  currentTime: number;
+}
+
 interface LyricsSheetProps {
   lyrics: string | null;
   isVisible: boolean;
   onClose: () => void;
   trackTitle?: string;
   trackArtist?: string;
-  audioRef?: React.RefObject<HTMLAudioElement | null>;
+  audioRef?: React.RefObject<AudioLike | null>;
 }
 
 const proxyFetch = async (url: string) => {

@@ -1,0 +1,161 @@
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+export interface YTAudioHandle {
+  currentTime: number;
+  duration: number;
+  load: (videoId: string) => Promise<void>;
+  play: () => Promise<void>;
+  pause: () => void;
+  unload: () => void;
+}
+
+interface Props {
+  onEnded?: () => void;
+  onTimeUpdate?: () => void;
+}
+
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+let apiPromise: Promise<void> | null = null;
+const loadYouTubeAPI = (): Promise<void> => {
+  if (apiPromise) return apiPromise;
+  apiPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) {
+      resolve();
+      return;
+    }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prev?.();
+      resolve();
+    };
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  });
+  return apiPromise;
+};
+
+const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }, ref) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<any>(null);
+  const currentTimeRef = useRef(0);
+  const durationRef = useRef(0);
+  const readyRef = useRef(false);
+  const pendingVideoRef = useRef<string | null>(null);
+  const tickRef = useRef<number | null>(null);
+  const onEndedRef = useRef(onEnded);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  onEndedRef.current = onEnded;
+  onTimeUpdateRef.current = onTimeUpdate;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadYouTubeAPI().then(() => {
+      if (cancelled || !containerRef.current) return;
+      const inner = document.createElement("div");
+      containerRef.current.appendChild(inner);
+      playerRef.current = new window.YT.Player(inner, {
+        height: "1",
+        width: "1",
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          disablekb: 1,
+          fs: 0,
+        },
+        events: {
+          onReady: () => {
+            readyRef.current = true;
+            if (pendingVideoRef.current) {
+              const vid = pendingVideoRef.current;
+              pendingVideoRef.current = null;
+              try { playerRef.current.loadVideoById(vid); } catch {}
+            }
+          },
+          onStateChange: (e: any) => {
+            const YT = window.YT;
+            if (!YT) return;
+            if (e.data === YT.PlayerState.ENDED) {
+              onEndedRef.current?.();
+            }
+            if (e.data === YT.PlayerState.PLAYING) {
+              try { durationRef.current = playerRef.current.getDuration() || 0; } catch {}
+            }
+          },
+        },
+      });
+    });
+
+    const tick = () => {
+      try {
+        if (playerRef.current?.getCurrentTime) {
+          currentTimeRef.current = playerRef.current.getCurrentTime() || 0;
+          onTimeUpdateRef.current?.();
+        }
+      } catch {}
+      tickRef.current = window.setTimeout(tick, 250);
+    };
+    tickRef.current = window.setTimeout(tick, 250);
+
+    return () => {
+      cancelled = true;
+      if (tickRef.current) clearTimeout(tickRef.current);
+      try { playerRef.current?.destroy?.(); } catch {}
+      playerRef.current = null;
+    };
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    get currentTime() { return currentTimeRef.current; },
+    get duration() { return durationRef.current; },
+    load: async (videoId: string) => {
+      currentTimeRef.current = 0;
+      durationRef.current = 0;
+      if (!readyRef.current || !playerRef.current) {
+        pendingVideoRef.current = videoId;
+        return;
+      }
+      try { playerRef.current.loadVideoById(videoId); } catch {}
+    },
+    play: async () => {
+      try { playerRef.current?.playVideo?.(); } catch {}
+    },
+    pause: () => {
+      try { playerRef.current?.pauseVideo?.(); } catch {}
+    },
+    unload: () => {
+      currentTimeRef.current = 0;
+      durationRef.current = 0;
+      pendingVideoRef.current = null;
+      try { playerRef.current?.stopVideo?.(); } catch {}
+    },
+  }), []);
+
+  return (
+    <div
+      ref={containerRef}
+      aria-hidden
+      style={{
+        position: "fixed",
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: "none",
+        left: -9999,
+        top: -9999,
+      }}
+    />
+  );
+});
+
+YouTubeAudio.displayName = "YouTubeAudio";
+export default YouTubeAudio;

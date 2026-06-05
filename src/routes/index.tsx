@@ -14,6 +14,7 @@ import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 const supabase = supabaseTyped as any;
 import SpinnerLogo from "@/components/SpinnerLogo";
 import MusicPlayer from "@/components/MusicPlayer";
+import YouTubeAudio, { type YTAudioHandle } from "@/components/YouTubeAudio";
 const profileAvatarGif = "https://i.pinimg.com/originals/ea/d8/26/ead8269afcd3834e662993b95f6ca93a.gif";
 
 const POPULAR_ARTISTS = [
@@ -39,15 +40,6 @@ const shuffleArray = <T,>(arr: T[]): T[] => {
 };
 
 
-const hashString = (str: string): string => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36);
-};
 
 const Index = () => {
   const [query, setQuery] = useState("");
@@ -61,7 +53,7 @@ const Index = () => {
   const [loadingTrackUrl, setLoadingTrackUrl] = useState<string | null>(null);
   const [remainingTime, setRemainingTime] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<YTAudioHandle | null>(null);
   const playbackRequestIdRef = useRef(0);
 
   const [lyrics, setLyrics] = useState<string | null>(null);
@@ -352,38 +344,32 @@ const Index = () => {
     } catch { setLyrics(null); }
   }, []);
 
-  const cacheMP3InBackground = useCallback((downloadUrl: string, trackUrl: string) => {
-    const cacheKey = hashString(trackUrl) + ".mp3";
-    supabase.functions.invoke("cache-mp3", {
-      body: { downloadUrl, cacheKey },
-    }).catch(() => {});
-  }, []);
-
-  const getCachedUrl = useCallback((trackUrl: string): string => {
-    const cacheKey = hashString(trackUrl) + ".mp3";
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    return `${supabaseUrl}/storage/v1/object/public/mp3-cache/${cacheKey}`;
-  }, []);
-
-  // Search Apple Music for a song title and return a playable Apple Music track
-  const findAppleMusicFallback = useCallback(async (track: Track): Promise<string | null> => {
+  // Search YouTube via youtube-search-api (server-side) for the best matching video ID
+  const findYouTubeVideoId = useCallback(async (track: Track): Promise<string | null> => {
     try {
-      const searchTerm = track.title.replace(/^.+\s-\s/, "") + " " + (track.artist || "");
-      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&entity=song&limit=1`);
-      const data = await res.json();
-      if (data?.results?.[0]?.trackViewUrl) {
-        const appleUrl = data.results[0].trackViewUrl;
-        const dlData = await proxyFetch(
-          `https://www.neoapis.xyz/api/downloader/applemusic?url=${encodeURIComponent(appleUrl)}`
-        );
-        if (dlData?.data?.download_url) {
-          return dlData.data.download_url;
-        }
-      }
-    } catch (e) {
-      console.error("Apple Music fallback error:", e);
+      const cleanTitle = track.title.replace(/^.+\s-\s/, "").trim();
+      const artist = (track.artist || "").trim();
+      const query = `${artist} ${cleanTitle} audio`.trim();
+      const { data, error } = await supabase.functions.invoke("youtube-search", {
+        body: { query },
+      });
+      if (error) return null;
+      const items: any[] = data?.items || [];
+      if (items.length === 0) return null;
+
+      // Score by matching tokens in title
+      const ref = `${artist} ${cleanTitle}`.toLowerCase();
+      const words = ref.split(/\s+/).filter((w) => w.length > 2);
+      const scored = items.map((it) => {
+        const t = (it.title || "").toLowerCase();
+        const matches = words.filter((w) => t.includes(w)).length;
+        return { it, score: matches };
+      }).sort((a, b) => b.score - a.score);
+
+      return scored[0]?.it?.id || items[0]?.id || null;
+    } catch {
+      return null;
     }
-    return null;
   }, []);
 
   const handlePlayTrack = useCallback(async (track: Track) => {
@@ -400,14 +386,12 @@ const Index = () => {
       return;
     }
 
-    // Pause any playing YouTube video (don't destroy it)
+    // Pause any playing YouTube preview cards (don't destroy them)
     document.querySelectorAll("video").forEach(v => { v.pause(); });
-    // Signal YouTubeCard iframes to fully stop (iframes are not <video>)
     setYoutubeStopSignal((n) => n + 1);
 
     audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
+    audio.unload();
     setPlayingTrackUrl(null);
     setLoadingTrackUrl(track.track_url);
     setRemainingTime(null);
@@ -415,77 +399,30 @@ const Index = () => {
 
     playbackRequestIdRef.current += 1;
     const requestId = playbackRequestIdRef.current;
-
     const isStaleRequest = () => playbackRequestIdRef.current !== requestId;
 
-    const startPlayback = async (sourceUrl: string, cacheSourceUrl?: string) => {
-      if (isStaleRequest()) return false;
+    try {
+      const videoId = await findYouTubeVideoId(track);
+      if (isStaleRequest()) return;
 
-      audio.pause();
-      audio.src = sourceUrl;
-      await audio.play();
+      if (!videoId) {
+        if (!isStaleRequest()) alert("Gagal menemukan audio untuk lagu ini");
+        return;
+      }
 
+      await audio.load(videoId);
       if (isStaleRequest()) {
         audio.pause();
-        return false;
+        return;
+      }
+      await audio.play();
+      if (isStaleRequest()) {
+        audio.pause();
+        return;
       }
 
       setPlayingTrackUrl(track.track_url);
       setCurrentTrack(track);
-
-      if (cacheSourceUrl) {
-        cacheMP3InBackground(cacheSourceUrl, track.track_url);
-      }
-
-      return true;
-    };
-
-    try {
-      const cachedUrl = getCachedUrl(track.track_url);
-      let played = false;
-
-      try {
-        const headRes = await fetch(cachedUrl, { method: "HEAD" });
-        if (!isStaleRequest() && headRes.ok) {
-          played = await startPlayback(cachedUrl);
-        }
-      } catch {}
-
-      if (!played && track.source === "spotify") {
-        // Primary: harzrestapi.web.id (direct MP3 download, no JSON)
-        try {
-          const directUrl = `https://api.harzrestapi.web.id/api/spotify?url=${encodeURIComponent(track.track_url)}`;
-          if (!isStaleRequest()) {
-            played = await startPlayback(directUrl, directUrl);
-          }
-        } catch {}
-
-        // Fallback: Search Apple Music with same title
-        if (!played) {
-          try {
-            const appleUrl = await findAppleMusicFallback(track);
-            if (!isStaleRequest() && appleUrl) {
-              played = await startPlayback(appleUrl, appleUrl);
-            }
-          } catch {}
-        }
-
-        if (!played && !isStaleRequest()) alert("Gagal memutar lagu Spotify");
-      } else if (!played) {
-        // Apple Music: neoapis.xyz
-        try {
-          const data = await proxyFetch(
-            `https://www.neoapis.xyz/api/downloader/applemusic?url=${encodeURIComponent(track.track_url)}`
-          );
-          if (!isStaleRequest() && data?.data?.download_url) {
-            played = await startPlayback(data.data.download_url, data.data.download_url);
-          }
-        } catch {}
-
-        if (!played && !isStaleRequest()) alert("Gagal memutar lagu");
-      }
-
-      if (isStaleRequest() || !played) return;
 
       // Google ring tracking - any song counts
       if (user) {
@@ -507,7 +444,7 @@ const Index = () => {
         setLoadingTrackUrl(null);
       }
     }
-  }, [playingTrackUrl, user, totalPlays, getCachedUrl, cacheMP3InBackground, findAppleMusicFallback]);
+  }, [playingTrackUrl, user, totalPlays, findYouTubeVideoId]);
 
   // Play saved track with auto-play queue — use current savedTracks order
   const handlePlaySavedTrack = useCallback((track: Track) => {
@@ -579,40 +516,38 @@ const Index = () => {
     setShowAILabs(true);
   }, [menuState, showAILabs, isLoadingAILabs, user]);
 
-  // Audio events with auto-advance for saved tracks
-  useEffect(() => {
+  // Audio event callbacks (passed to YouTubeAudio)
+  const handleAudioTimeUpdate = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    const onTimeUpdate = () => {
-      if (currentTrack) {
-        const durationMs = currentTrack.duration_ms > 0 ? currentTrack.duration_ms : parseDurationToMs(currentTrack.duration);
-        const remainingMs = durationMs - audio.currentTime * 1000;
-        setRemainingTime(formatTime(remainingMs));
-      }
-    };
-    const onEnded = () => {
-      // Auto-play next in saved tracks queue
-      if (autoPlayQueue.length > 0 && autoPlayIndex >= 0 && autoPlayIndex < autoPlayQueue.length - 1) {
-        const nextIndex = autoPlayIndex + 1;
-        setAutoPlayIndex(nextIndex);
-        const nextTrack = autoPlayQueue[nextIndex];
-        setCurrentTrack(nextTrack);
-        handlePlayTrack(nextTrack);
-        return;
-      }
+    if (!audio || !currentTrack) return;
+    let durationMs = currentTrack.duration_ms > 0
+      ? currentTrack.duration_ms
+      : parseDurationToMs(currentTrack.duration);
+    if (!durationMs && audio.duration > 0) {
+      durationMs = Math.floor(audio.duration * 1000);
+    }
+    if (!durationMs) return;
+    const remainingMs = durationMs - audio.currentTime * 1000;
+    setRemainingTime(formatTime(remainingMs));
+  }, [currentTrack]);
 
-      setPlayingTrackUrl(null);
-      setRemainingTime(null);
-      setCurrentTrack(null);
-      setShowLyrics(false);
-      setShowAILabs(false);
-      setAutoPlayQueue([]);
-      setAutoPlayIndex(-1);
-    };
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("ended", onEnded);
-    return () => { audio.removeEventListener("timeupdate", onTimeUpdate); audio.removeEventListener("ended", onEnded); };
-  }, [currentTrack, autoPlayQueue, autoPlayIndex, handlePlayTrack]);
+  const handleAudioEnded = useCallback(() => {
+    if (autoPlayQueue.length > 0 && autoPlayIndex >= 0 && autoPlayIndex < autoPlayQueue.length - 1) {
+      const nextIndex = autoPlayIndex + 1;
+      setAutoPlayIndex(nextIndex);
+      const nextTrack = autoPlayQueue[nextIndex];
+      setCurrentTrack(nextTrack);
+      handlePlayTrack(nextTrack);
+      return;
+    }
+    setPlayingTrackUrl(null);
+    setRemainingTime(null);
+    setCurrentTrack(null);
+    setShowLyrics(false);
+    setShowAILabs(false);
+    setAutoPlayQueue([]);
+    setAutoPlayIndex(-1);
+  }, [autoPlayQueue, autoPlayIndex, handlePlayTrack]);
 
   // Google ring expiry check
   useEffect(() => {
@@ -731,7 +666,7 @@ const Index = () => {
                    {youtubeVideos.map((video) => (
                      <YouTubeCard key={video.id} video={video} stopSignal={youtubeStopSignal} onPlayStart={() => {
                       const audio = audioRef.current;
-                      if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
+                      if (audio) { audio.pause(); audio.unload(); }
                       // Cancel any in-flight track load so it doesn't pop the player back open
                       playbackRequestIdRef.current += 1;
                       setLoadingTrackUrl(null);
@@ -797,7 +732,7 @@ const Index = () => {
             </>
         )}
 
-        <audio ref={audioRef} className="hidden" />
+        <YouTubeAudio ref={audioRef} onEnded={handleAudioEnded} onTimeUpdate={handleAudioTimeUpdate} />
 
         {currentTrack && (
           <MusicPlayer
@@ -820,8 +755,7 @@ const Index = () => {
               const audio = audioRef.current;
               if (audio) {
                 audio.pause();
-                audio.removeAttribute("src");
-                audio.load();
+                audio.unload();
               }
               // Cancel any in-flight playback request so loading state stops
               playbackRequestIdRef.current += 1;
