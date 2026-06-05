@@ -675,7 +675,7 @@ const Index = () => {
                    {youtubeVideos.map((video) => (
                      <YouTubeCard key={video.id} video={video} stopSignal={youtubeStopSignal} onPlayStart={() => {
                       const audio = audioRef.current;
-                      if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); }
+                      if (audio) { audio.pause(); audio.unload(); }
                       // Cancel any in-flight track load so it doesn't pop the player back open
                       playbackRequestIdRef.current += 1;
                       setLoadingTrackUrl(null);
