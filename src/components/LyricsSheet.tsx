@@ -201,19 +201,21 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
       const hit = Array.isArray(data) ? data.find((d: any) => d?.syncedLyrics) : null;
       const synced: string | undefined = hit?.syncedLyrics;
       if (!synced) throw new Error("No synced lyrics");
+      // LRCLIB sometimes has ad-lib lines like "(oh oh oh)" or "[chorus]" that
+      // don't exist in the opus lyrics. Skip them so timings align 1:1 with opus lines.
+      const isParentheticalOnly = (s: string) => /^\s*[\(\[\{][^()\[\]{}]*[\)\]\}]\s*$/.test(s);
       const times: number[] = [];
-      const lines: string[] = [];
       for (const raw of synced.split("\n")) {
         const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (!m) continue;
         const text = m[3].trim();
-        if (!text) continue; // skip blank-text timestamps to avoid line offset bugs
+        if (!text) continue;
+        if (isParentheticalOnly(text)) continue;
         times.push(parseInt(m[1], 10) * 60 + parseFloat(m[2]));
-        lines.push(text);
       }
       if (times.length === 0) throw new Error("No timings");
       setSyncTimings(times);
-      setSyncLines(lines);
+      setSyncLines(null);
       setSyncMode(true);
     } catch (e) {
       console.error("Sync lyrics error:", e);
@@ -277,9 +279,10 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              {syncMode && syncLines ? (
+              {syncMode && syncTimings ? (
                 <div className="pt-4">
-                  {syncLines.map((line, i) => {
+                  {nonBlankIdxs.map((origIdx, i) => {
+                    const line = lyricLines[origIdx];
                     const isActive = i === currentLineIdx;
                     return (
                       <div
