@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Languages, Loader2, Check } from "lucide-react";
+import { Languages, Loader2, Check, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ArtistSong {
@@ -44,6 +44,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
   const [translateLabel, setTranslateLabel] = useState<null | "Id" | "En">(null);
   const [isSwitchingLabel, setIsSwitchingLabel] = useState(false);
+  const [copied, setCopied] = useState(false);
   const activeLineRef = useRef<HTMLDivElement>(null);
   const startY = useRef(0);
 
@@ -59,6 +60,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
     setCurrentLineIdx(-1);
     setTranslateLabel(null);
     setIsSwitchingLabel(false);
+    setCopied(false);
   }, [lyrics]);
 
   // Fetch artist info when lyrics sheet opens
@@ -187,6 +189,36 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
     lyricLines.forEach((l, i) => { if (l.trim()) arr.push(i); });
     return arr;
   }, [lyricLines]);
+
+  const translatedLines = useMemo(
+    () => (translatedLyrics ? translatedLyrics.split("\n") : []),
+    [translatedLyrics]
+  );
+
+  const getLineDisplay = (origIdx: number, fallback: string) => {
+    if (showTranslated && translatedLyrics) {
+      const t = translatedLines[origIdx];
+      if (t !== undefined && t.trim()) return t;
+    }
+    return fallback;
+  };
+
+  const handleCopy = async () => {
+    const text = showTranslated && translatedLyrics ? translatedLyrics : (lyrics || "");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleSync = async () => {
     if (syncMode) { setSyncMode(false); return; }
@@ -324,15 +356,16 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
                     }
                     const i = nonBlankIdxs.indexOf(origIdx);
                     const isActive = i === currentLineIdx;
+                    const display = getLineDisplay(origIdx, line);
                     return (
                       <div
                         key={origIdx}
                         ref={isActive ? activeLineRef : undefined}
                       >
                         {isActive ? (
-                          <span className="bg-black/30 rounded-md px-2 -mx-2">{line}</span>
+                          <span className="bg-black/30 rounded-md px-2 -mx-2">{display}</span>
                         ) : (
-                          line
+                          display
                         )}
                       </div>
                     );
@@ -372,6 +405,12 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
                   <p className="text-[9px] text-muted-foreground/30 mt-0.5">Lirik mungkin tidak 100% akurat</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg bg-foreground/5 backdrop-blur-md border border-foreground/10 text-muted-foreground opacity-60 transition-colors"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
                   <button
                     onClick={handleSync}
                     disabled={isLoadingSync}
