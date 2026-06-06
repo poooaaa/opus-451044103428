@@ -281,12 +281,15 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
             <>
               {syncMode && syncTimings ? (
                 <div className="pt-4">
-                  {nonBlankIdxs.map((origIdx, i) => {
-                    const line = lyricLines[origIdx];
+                  {lyricLines.map((line, origIdx) => {
+                    if (!line.trim()) {
+                      return <div key={origIdx} className="h-[1em]" aria-hidden />;
+                    }
+                    const i = nonBlankIdxs.indexOf(origIdx);
                     const isActive = i === currentLineIdx;
                     return (
                       <div
-                        key={i}
+                        key={origIdx}
                         ref={isActive ? activeLineRef : undefined}
                         className="text-xs leading-relaxed text-muted-foreground py-0.5"
                       >
