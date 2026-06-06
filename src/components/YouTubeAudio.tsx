@@ -166,6 +166,14 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     play: async () => {
       userPausedRef.current = false;
       try { playerRef.current?.playVideo?.(); } catch {}
+      // Wait until YouTube reports PLAYING so caller can sync UI with actual audio start.
+      await new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => { if (done) return; done = true; resolve(); };
+        playWaitersRef.current.push(finish);
+        // Safety timeout so we don't hang forever if state event is missed.
+        setTimeout(finish, 4000);
+      });
     },
     pause: () => {
       userPausedRef.current = true;
