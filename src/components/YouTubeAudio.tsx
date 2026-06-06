@@ -51,6 +51,7 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
   const tickRef = useRef<number | null>(null);
   const wasPlayingRef = useRef(false);
   const userPausedRef = useRef(false);
+  const playWaitersRef = useRef<Array<() => void>>([]);
   const onEndedRef = useRef(onEnded);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   onEndedRef.current = onEnded;
@@ -93,6 +94,9 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
             if (e.data === YT.PlayerState.PLAYING) {
               wasPlayingRef.current = true;
               try { durationRef.current = playerRef.current.getDuration() || 0; } catch {}
+              const waiters = playWaitersRef.current;
+              playWaitersRef.current = [];
+              waiters.forEach((fn) => fn());
             }
             if (e.data === YT.PlayerState.PAUSED) {
               // If pause happens while tab hidden, browser/YT auto-paused — resume it.
@@ -162,6 +166,14 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     play: async () => {
       userPausedRef.current = false;
       try { playerRef.current?.playVideo?.(); } catch {}
+      // Wait until YouTube reports PLAYING so caller can sync UI with actual audio start.
+      await new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => { if (done) return; done = true; resolve(); };
+        playWaitersRef.current.push(finish);
+        // Safety timeout so we don't hang forever if state event is missed.
+        setTimeout(finish, 4000);
+      });
     },
     pause: () => {
       userPausedRef.current = true;
