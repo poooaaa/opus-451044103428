@@ -152,6 +152,7 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     load: async (videoId: string) => {
       currentTimeRef.current = 0;
       durationRef.current = 0;
+      userPausedRef.current = false;
       if (!readyRef.current || !playerRef.current) {
         pendingVideoRef.current = videoId;
         return;
@@ -159,15 +160,20 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
       try { playerRef.current.loadVideoById(videoId); } catch {}
     },
     play: async () => {
+      userPausedRef.current = false;
       try { playerRef.current?.playVideo?.(); } catch {}
     },
     pause: () => {
+      userPausedRef.current = true;
+      wasPlayingRef.current = false;
       try { playerRef.current?.pauseVideo?.(); } catch {}
     },
     unload: () => {
       currentTimeRef.current = 0;
       durationRef.current = 0;
       pendingVideoRef.current = null;
+      userPausedRef.current = true;
+      wasPlayingRef.current = false;
       try { playerRef.current?.stopVideo?.(); } catch {}
     },
   }), []);
