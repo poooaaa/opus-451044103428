@@ -41,6 +41,37 @@ const coerceMatchIndex = (value: unknown, max: number) => {
   return n;
 };
 
+const buildHeuristicMatches = (opusLines: string[], lrclib: Array<{ t: number; text: string }>) => {
+  const matches: Array<number | null> = [];
+  let cursor = 0;
+
+  for (let i = 0; i < opusLines.length; i++) {
+    const remainingOpus = opusLines.length - i - 1;
+    const maxIndex = Math.max(cursor, lrclib.length - remainingOpus - 1);
+    let bestIdx: number | null = null;
+    let bestScore = 0;
+
+    for (let j = cursor; j <= maxIndex && j < lrclib.length; j++) {
+      const base = similarityScore(opusLines[i], lrclib[j]?.text || "");
+      const exactBonus = normalizeText(opusLines[i]) === normalizeText(lrclib[j]?.text || "") ? 1 : 0;
+      const score = base + exactBonus;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = j;
+      }
+    }
+
+    if (bestIdx != null && bestScore >= 0.22) {
+      matches.push(bestIdx);
+      cursor = bestIdx + 1;
+    } else {
+      matches.push(null);
+    }
+  }
+
+  return matches;
+};
+
 const buildTimingsFromMatches = (opusLines: string[], lrclib: Array<{ t: number; text: string }>, rawMatches: unknown[]) => {
   const matches = rawMatches.slice(0, opusLines.length).map((value) => coerceMatchIndex(value, lrclib.length));
 
@@ -104,10 +135,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!GROQ_KEY) {
-      throw new Error("GROQ_API_KEY is not configured");
-    }
-
     const opusText = opusLines.map((l: string, i: number) => `${i}: ${l}`).join("\n");
     const lrclibText = lrclib
       .map((x: any, i: number) => `${i} [${Number(x.t).toFixed(2)}s] ${x.text}`)
@@ -125,38 +152,46 @@ For EACH opus line index (0..${opusLines.length - 1}) return the LRCLIB line ind
 
 Return ONLY a JSON object: {"matches":[m0,m1,...]} with exactly ${opusLines.length} items. Each item must be an integer LRCLIB index or null. No prose.`;
 
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GROQ_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: "You output only valid JSON. No commentary." },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-        max_tokens: 4000,
-      }),
-    });
+    let parsed: any = {};
 
-    if (!res.ok) {
-      throw new Error(`Groq request failed with status ${res.status}`);
+    if (GROQ_KEY) {
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${GROQ_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: "You output only valid JSON. No commentary." },
+              { role: "user", content: prompt },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.1,
+            max_tokens: 4000,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const raw = data?.choices?.[0]?.message?.content || "{}";
+          try { parsed = JSON.parse(raw); } catch {}
+        }
+      } catch (groqError) {
+        console.error("sync-lyrics groq fallback:", groqError);
+      }
     }
 
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content || "{}";
-    let parsed: any = {};
-    try { parsed = JSON.parse(raw); } catch {}
     let timings: number[] = [];
 
     if (Array.isArray(parsed.matches) && parsed.matches.length === opusLines.length) {
       timings = buildTimingsFromMatches(opusLines, lrclib, parsed.matches);
     } else if (Array.isArray(parsed.timings)) {
       timings = parsed.timings.map((n: any) => Number(n)).filter((n: any) => Number.isFinite(n));
+    } else {
+      timings = buildTimingsFromMatches(opusLines, lrclib, buildHeuristicMatches(opusLines, lrclib));
     }
 
     // Validate length; if mismatched, fall back to proportional interpolation.
