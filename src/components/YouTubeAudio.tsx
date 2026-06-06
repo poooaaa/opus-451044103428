@@ -116,9 +116,31 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     };
     tickRef.current = window.setTimeout(tick, 250);
 
+    // Keep audio alive when tab is hidden / window blurred — resume if YT auto-paused.
+    const resumeIfNeeded = () => {
+      if (!wasPlayingRef.current || userPausedRef.current) return;
+      try {
+        const YT = window.YT;
+        const state = playerRef.current?.getPlayerState?.();
+        if (YT && state !== undefined && state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
+          playerRef.current?.playVideo?.();
+        }
+      } catch {}
+    };
+    const onVisibility = () => { resumeIfNeeded(); };
+    const onBlur = () => { setTimeout(resumeIfNeeded, 200); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", resumeIfNeeded);
+    const keepAlive = window.setInterval(resumeIfNeeded, 2000);
+
     return () => {
       cancelled = true;
       if (tickRef.current) clearTimeout(tickRef.current);
+      clearInterval(keepAlive);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", resumeIfNeeded);
       try { playerRef.current?.destroy?.(); } catch {}
       playerRef.current = null;
     };
