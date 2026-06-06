@@ -204,16 +204,49 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
       // LRCLIB sometimes has ad-lib lines like "(oh oh oh)" or "[chorus]" that
       // don't exist in the opus lyrics. Skip them so timings align 1:1 with opus lines.
       const isParentheticalOnly = (s: string) => /^\s*[\(\[\{][^()\[\]{}]*[\)\]\}]\s*$/.test(s);
-      const times: number[] = [];
+      const lrclibPairs: { t: number; text: string }[] = [];
       for (const raw of synced.split("\n")) {
         const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (!m) continue;
         const text = m[3].trim();
         if (!text) continue;
         if (isParentheticalOnly(text)) continue;
-        times.push(parseInt(m[1], 10) * 60 + parseFloat(m[2]));
+        lrclibPairs.push({ t: parseInt(m[1], 10) * 60 + parseFloat(m[2]), text });
       }
-      if (times.length === 0) throw new Error("No timings");
+      if (lrclibPairs.length === 0) throw new Error("No timings");
+
+      const opusNonBlank = lyricLines.filter((l) => l.trim());
+      let times: number[];
+
+      if (opusNonBlank.length === lrclibPairs.length) {
+        // 1:1 alignment, use as-is.
+        times = lrclibPairs.map((p) => p.t);
+      } else {
+        // Mismatch — ask Groq to map opus lines to LRCLIB timestamps.
+        try {
+          const { data: mapData, error: mapErr } = await supabase.functions.invoke("sync-lyrics", {
+            body: { opusLines: opusNonBlank, lrclib: lrclibPairs },
+          });
+          if (mapErr) throw mapErr;
+          const mapped: number[] = Array.isArray(mapData?.timings) ? mapData.timings : [];
+          if (mapped.length === opusNonBlank.length) {
+            times = mapped;
+          } else {
+            // Fallback proportional interpolation.
+            const first = lrclibPairs[0].t;
+            const last = lrclibPairs[lrclibPairs.length - 1].t;
+            const step = (last - first) / Math.max(1, opusNonBlank.length - 1);
+            times = opusNonBlank.map((_, i) => first + step * i);
+          }
+        } catch (mapErr) {
+          console.error("Groq mapping failed, using interpolation:", mapErr);
+          const first = lrclibPairs[0].t;
+          const last = lrclibPairs[lrclibPairs.length - 1].t;
+          const step = (last - first) / Math.max(1, opusNonBlank.length - 1);
+          times = opusNonBlank.map((_, i) => first + step * i);
+        }
+      }
+
       setSyncTimings(times);
       setSyncLines(null);
       setSyncMode(true);
