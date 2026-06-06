@@ -10,6 +10,12 @@ const ENDPOINT =
   "https://ais-dev-qimxzhm73p7g3jbtuahe7c-469752920153.asia-east1.run.app/api/resolve";
 const COOKIE = Deno.env.get("AIS_COOKIE") || "";
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -18,10 +24,13 @@ Deno.serve(async (req) => {
   try {
     const { url } = await req.json();
     if (!url || typeof url !== "string") {
-      return new Response(JSON.stringify({ error: "Missing url" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Missing url" }, 400);
+    }
+    if (!COOKIE) {
+      return json(
+        { error: "AIS_COOKIE not configured", code: "COOKIE_MISSING" },
+        500,
+      );
     }
 
     const res = await fetch(`${ENDPOINT}?url=${encodeURIComponent(url)}`, {
@@ -29,47 +38,69 @@ Deno.serve(async (req) => {
         Cookie: COOKIE,
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json,text/plain,*/*",
+        Accept: "application/json",
       },
-      redirect: "follow",
+      redirect: "manual",
     });
 
+    // Redirect = cookie tidak valid (di-redirect ke login Google)
+    if (res.status >= 300 && res.status < 400) {
+      return json(
+        {
+          error:
+            "AIS_COOKIE kadaluwarsa atau tidak valid. Silakan perbarui cookie dari Google AI Studio.",
+          code: "COOKIE_EXPIRED",
+        },
+        401,
+      );
+    }
+
+    const contentType = res.headers.get("content-type") || "";
     const text = await res.text();
+
+    if (!contentType.includes("application/json")) {
+      const looksLikeHtml = text.trim().startsWith("<");
+      return json(
+        {
+          error: looksLikeHtml
+            ? "AIS_COOKIE kadaluwarsa atau tidak valid. Silakan perbarui cookie dari Google AI Studio."
+            : "Resolver mengembalikan response non-JSON",
+          code: looksLikeHtml ? "COOKIE_EXPIRED" : "INVALID_RESPONSE",
+          status: res.status,
+        },
+        looksLikeHtml ? 401 : 502,
+      );
+    }
+
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid response from resolver", raw: text.slice(0, 200) }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return json(
+        { error: "Invalid JSON from resolver", raw: text.slice(0, 200) },
+        502,
       );
+    }
+
+    if (!res.ok) {
+      return json({ error: data?.error || "Resolver error", data }, res.status);
     }
 
     let previewUrl: string | undefined = data?.preview_url || data?.url;
     if (previewUrl && previewUrl.startsWith("http://")) {
       previewUrl = "https://" + previewUrl.slice("http://".length);
     }
-
     if (!previewUrl) {
-      return new Response(
-        JSON.stringify({ error: "No preview_url in response", data }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "No preview_url in response", data }, 502);
     }
 
-    return new Response(
-      JSON.stringify({
-        previewUrl,
-        title: data?.title,
-        thumbnail: data?.thumbnail,
-        resolution: data?.resolution,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({
+      previewUrl,
+      title: data?.title,
+      thumbnail: data?.thumbnail,
+      resolution: data?.resolution,
+    });
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: (error as Error).message || "Request failed" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({ error: (error as Error).message || "Request failed" }, 500);
   }
 });
