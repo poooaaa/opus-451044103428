@@ -353,6 +353,20 @@ const Index = () => {
     } catch { setLyrics(null); }
   }, []);
 
+  const extractYouTubeDurationSeconds = useCallback((item: any) => {
+    const raw = item?.duration ?? item?.duration_seconds ?? item?.lengthSeconds ?? item?.length_seconds ?? item?.seconds;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (/^\d+$/.test(trimmed)) return Number(trimmed);
+      const parts = trimmed.split(":").map((part) => Number(part));
+      if (parts.every((part) => Number.isFinite(part))) {
+        return parts.reduce((total, part) => total * 60 + part, 0);
+      }
+    }
+    return null;
+  }, []);
+
   // Search YouTube via youtube-search-api (server-side) for the best matching video ID
   const findYouTubeVideoId = useCallback(async (track: Track): Promise<string | null> => {
     try {
@@ -366,20 +380,39 @@ const Index = () => {
       const items: any[] = data?.items || [];
       if (items.length === 0) return null;
 
-      // Score by matching tokens in title
+      const trackDurationSeconds = track.duration_ms > 0 ? track.duration_ms / 1000 : null;
+
+      // Score by matching tokens in title + duration closeness
       const ref = `${artist} ${cleanTitle}`.toLowerCase();
       const words = ref.split(/\s+/).filter((w) => w.length > 2);
       const scored = items.map((it) => {
         const t = (it.title || "").toLowerCase();
         const matches = words.filter((w) => t.includes(w)).length;
-        return { it, score: matches };
-      }).sort((a, b) => b.score - a.score);
+        const durationSeconds = extractYouTubeDurationSeconds(it);
+        const durationDiff = trackDurationSeconds == null || durationSeconds == null
+          ? Number.POSITIVE_INFINITY
+          : Math.abs(durationSeconds - trackDurationSeconds);
+
+        return {
+          it,
+          score: matches,
+          durationDiff,
+          withinTolerance: durationDiff <= 1,
+        };
+      }).sort((a, b) => {
+        if (a.withinTolerance !== b.withinTolerance) return a.withinTolerance ? -1 : 1;
+        if (a.durationDiff !== b.durationDiff) return a.durationDiff - b.durationDiff;
+        return b.score - a.score;
+      });
+
+      const strictDurationMatch = scored.find((item) => item.withinTolerance);
+      if (strictDurationMatch) return strictDurationMatch.it?.id || null;
 
       return scored[0]?.it?.id || items[0]?.id || null;
     } catch {
       return null;
     }
-  }, []);
+  }, [extractYouTubeDurationSeconds]);
 
   const handlePlayTrack = useCallback(async (track: Track) => {
     const audio = audioRef.current;
