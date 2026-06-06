@@ -39,6 +39,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
   const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
   const [syncMode, setSyncMode] = useState(false);
   const [syncTimings, setSyncTimings] = useState<number[] | null>(null);
+  const [syncLines, setSyncLines] = useState<string[] | null>(null);
   const [isLoadingSync, setIsLoadingSync] = useState(false);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
   const [translateLabel, setTranslateLabel] = useState<null | "Id" | "En">(null);
