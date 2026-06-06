@@ -9,6 +9,7 @@ import SavedTracks from "@/components/SavedTracks";
 import PopularArtists from "@/components/PopularArtists";
 import FloatingMenu from "@/components/FloatingMenu";
 import LoginSheet from "@/components/LoginSheet";
+import CookieSheet from "@/components/CookieSheet";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 // Types haven't been regenerated for new tables yet; cast to any to bypass strict typing.
 const supabase = supabaseTyped as any;
