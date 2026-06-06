@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,22 @@ const corsHeaders = {
 
 const ENDPOINT =
   "https://ais-dev-qimxzhm73p7g3jbtuahe7c-469752920153.asia-east1.run.app/api/resolve";
-const COOKIE = Deno.env.get("AIS_COOKIE") || "";
+
+const getCookie = async (): Promise<string> => {
+  try {
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data } = await admin
+      .from("app_config")
+      .select("value")
+      .eq("key", "ais_cookie")
+      .maybeSingle();
+    if (data?.value) return data.value as string;
+  } catch {}
+  return Deno.env.get("AIS_COOKIE") || "";
+};
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -26,6 +42,7 @@ Deno.serve(async (req) => {
     if (!url || typeof url !== "string") {
       return json({ error: "Missing url" }, 400);
     }
+    const COOKIE = await getCookie();
     if (!COOKIE) {
       return json(
         { error: "AIS_COOKIE not configured", code: "COOKIE_MISSING" },
