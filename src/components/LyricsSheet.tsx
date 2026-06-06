@@ -55,6 +55,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
     setArtistSongs([]);
     setSyncMode(false);
     setSyncTimings(null);
+    setSyncLines(null);
     setCurrentLineIdx(-1);
     setTranslateLabel(null);
     setIsSwitchingLabel(false);
