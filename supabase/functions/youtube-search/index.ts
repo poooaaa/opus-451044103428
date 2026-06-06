@@ -20,7 +20,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const result = await youtubesearchapi.GetListByKeyword(query, false, 8);
+    const parseDurationSeconds = (value: string | undefined) => {
+      if (!value) return null;
+      const parts = value.split(":").map((part) => Number(part));
+      if (parts.some((part) => !Number.isFinite(part))) return null;
+      return parts.reduce((total, part) => total * 60 + part, 0);
+    };
+
+    const result = await youtubesearchapi.GetListByKeyword(query, false, 20);
     const items = (result?.items || [])
       .filter((i: any) => i.type === "video" && i.id)
       .map((i: any) => ({
@@ -28,6 +35,7 @@ Deno.serve(async (req) => {
         title: i.title || "",
         thumbnail: i.thumbnail?.thumbnails?.[i.thumbnail.thumbnails.length - 1]?.url || "",
         duration: i.length?.simpleText || "",
+        duration_seconds: parseDurationSeconds(i.length?.simpleText),
         channel: i.channelTitle || "",
       }));
 
