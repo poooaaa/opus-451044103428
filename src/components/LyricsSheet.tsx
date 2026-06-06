@@ -280,10 +280,14 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
           {lyrics ? (
             <>
               {syncMode && syncTimings ? (
-                <div className="pt-4">
+                <div className="text-xs leading-relaxed text-muted-foreground pt-4">
                   {lyricLines.map((line, origIdx) => {
                     if (!line.trim()) {
-                      return <div key={origIdx} className="h-[1em]" aria-hidden />;
+                      return (
+                        <div key={origIdx} aria-hidden>
+                          <span className="invisible">&nbsp;</span>
+                        </div>
+                      );
                     }
                     const i = nonBlankIdxs.indexOf(origIdx);
                     const isActive = i === currentLineIdx;
@@ -291,10 +295,9 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
                       <div
                         key={origIdx}
                         ref={isActive ? activeLineRef : undefined}
-                        className="text-xs leading-relaxed text-muted-foreground py-0.5"
                       >
                         {isActive ? (
-                          <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{line}</span>
+                          <span className="bg-foreground/10 rounded-md px-2 -mx-2">{line}</span>
                         ) : (
                           line
                         )}
