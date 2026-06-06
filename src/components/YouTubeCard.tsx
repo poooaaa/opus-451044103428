@@ -33,42 +33,36 @@ import { supabase } from "@/integrations/supabase/client";
 const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  // Keep latest onPlayStart in a ref to avoid stale closures
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const onPlayStartRef = useRef(onPlayStart);
   onPlayStartRef.current = onPlayStart;
 
-  // Stop the iframe when an external signal changes (e.g. user plays music)
   useEffect(() => {
     if (stopSignal === undefined) return;
     setIsPlaying(false);
     setIsLoading(false);
+    setVideoUrl(null);
   }, [stopSignal]);
 
-  const getVideoId = (url: string): string | null => {
-    try {
-      const u = new URL(url);
-      if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
-      const v = u.searchParams.get("v");
-      if (v) return v;
-      const m = u.pathname.match(/\/(embed|shorts)\/([\w-]+)/);
-      if (m) return m[2];
-    } catch {}
-    const m = url.match(/[?&]v=([\w-]+)/);
-    return m ? m[1] : null;
-  };
-
   const handleClick = useCallback(async () => {
-    if (isPlaying) return;
-    if (isLoading) return;
+    if (isPlaying || isLoading) return;
     setIsLoading(true);
-    // Simulate brief loading like the previous server-download flow
-    await new Promise((r) => setTimeout(r, 600));
-    onPlayStartRef.current?.();
-    setIsPlaying(true);
-    setIsLoading(false);
-  }, [isPlaying, isLoading]);
-
-  const videoId = getVideoId(video.url);
+    try {
+      const { data, error } = await supabase.functions.invoke("resolve-video", {
+        body: { url: video.url },
+      });
+      if (error) throw error;
+      const url = (data as any)?.previewUrl;
+      if (!url) throw new Error("No preview URL");
+      setVideoUrl(url);
+      onPlayStartRef.current?.();
+      setIsPlaying(true);
+    } catch (e) {
+      console.error("resolve-video error:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isPlaying, isLoading, video.url]);
 
   return (
     <div className="w-full animate-fade-in-up">
@@ -76,13 +70,14 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
         className={`relative w-full aspect-video overflow-hidden bg-secondary cursor-pointer select-none transition-all duration-300 ${isPlaying ? "rounded-3xl" : "rounded-lg"}`}
         onClick={handleClick}
       >
-        {isPlaying && videoId ? (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&disablekb=1&playsinline=1&color=white&theme=dark&fs=1`}
-            className="w-full h-full block border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            title={video.title}
+        {isPlaying && videoUrl ? (
+          <video
+            src={videoUrl}
+            className="w-full h-full block bg-black"
+            controls
+            autoPlay
+            playsInline
+            controlsList="nodownload"
           />
         ) : (
           <>
@@ -97,7 +92,6 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
                 <SpinnerLogo size={36} />
               </div>
             )}
-            {/* Duration */}
             <div className="absolute bottom-0 right-0 mb-2 mr-2 bg-background/90 backdrop-blur-md border border-border px-2 py-1 rounded-lg z-10">
               <span className="text-[9px] text-foreground leading-none block">
                 {formatYTDuration(video.duration)}
