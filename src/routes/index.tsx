@@ -205,6 +205,13 @@ const Index = () => {
     }
     if (overrideQuery !== undefined) setQuery(overrideQuery);
 
+    if (rawQuery.toLowerCase() === "#cookie") {
+      setShowCookieSheet(true);
+      setQuery("");
+      return;
+    }
+
+
     setLoading(true);
     setError("");
     setSearched(true);
