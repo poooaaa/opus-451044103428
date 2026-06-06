@@ -202,14 +202,18 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
       const synced: string | undefined = hit?.syncedLyrics;
       if (!synced) throw new Error("No synced lyrics");
       const times: number[] = [];
+      const lines: string[] = [];
       for (const raw of synced.split("\n")) {
         const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (!m) continue;
-        if (!m[3].trim()) continue; // skip blank-text timestamps to avoid the 1-line offset bug
+        const text = m[3].trim();
+        if (!text) continue; // skip blank-text timestamps to avoid line offset bugs
         times.push(parseInt(m[1], 10) * 60 + parseFloat(m[2]));
+        lines.push(text);
       }
       if (times.length === 0) throw new Error("No timings");
       setSyncTimings(times);
+      setSyncLines(lines);
       setSyncMode(true);
     } catch (e) {
       console.error("Sync lyrics error:", e);
