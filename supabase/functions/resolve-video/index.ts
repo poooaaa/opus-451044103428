@@ -111,12 +111,17 @@ Deno.serve(async (req) => {
       return json({ error: "No preview_url in response", data }, 502);
     }
 
+    // Wrap with stream-video proxy so the browser doesn't need the AIS auth cookie
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const proxiedUrl = `${supabaseUrl}/functions/v1/stream-video?url=${encodeURIComponent(previewUrl)}`;
+
     return json({
-      previewUrl,
+      previewUrl: proxiedUrl,
       title: data?.title,
       thumbnail: data?.thumbnail,
       resolution: data?.resolution,
     });
+
   } catch (error) {
     return json({ error: (error as Error).message || "Request failed" }, 500);
   }
