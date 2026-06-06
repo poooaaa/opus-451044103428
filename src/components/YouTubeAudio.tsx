@@ -87,10 +87,18 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
             const YT = window.YT;
             if (!YT) return;
             if (e.data === YT.PlayerState.ENDED) {
+              wasPlayingRef.current = false;
               onEndedRef.current?.();
             }
             if (e.data === YT.PlayerState.PLAYING) {
+              wasPlayingRef.current = true;
               try { durationRef.current = playerRef.current.getDuration() || 0; } catch {}
+            }
+            if (e.data === YT.PlayerState.PAUSED) {
+              // If pause happens while tab hidden, browser/YT auto-paused — resume it.
+              if (document.hidden && wasPlayingRef.current && !userPausedRef.current) {
+                try { playerRef.current?.playVideo?.(); } catch {}
+              }
             }
           },
         },
