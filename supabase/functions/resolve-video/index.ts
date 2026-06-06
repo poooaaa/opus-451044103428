@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
     if (!url || typeof url !== "string") {
       return json({ error: "Missing url" }, 400);
     }
+    const COOKIE = await getCookie();
     if (!COOKIE) {
       return json(
         { error: "AIS_COOKIE not configured", code: "COOKIE_MISSING" },
