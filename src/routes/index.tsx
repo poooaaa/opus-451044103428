@@ -358,7 +358,7 @@ const Index = () => {
     try {
       const cleanTitle = track.title.replace(/^.+\s-\s/, "").trim();
       const artist = (track.artist || "").trim();
-      const query = `${artist} ${cleanTitle} audio`.trim();
+      const query = `lagu ${artist} ${cleanTitle} audio`.trim();
       const { data, error } = await supabase.functions.invoke("youtube-search", {
         body: { query },
       });
