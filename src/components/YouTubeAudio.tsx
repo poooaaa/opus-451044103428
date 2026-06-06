@@ -94,6 +94,9 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
             if (e.data === YT.PlayerState.PLAYING) {
               wasPlayingRef.current = true;
               try { durationRef.current = playerRef.current.getDuration() || 0; } catch {}
+              const waiters = playWaitersRef.current;
+              playWaitersRef.current = [];
+              waiters.forEach((fn) => fn());
             }
             if (e.data === YT.PlayerState.PAUSED) {
               // If pause happens while tab hidden, browser/YT auto-paused — resume it.
