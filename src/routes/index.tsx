@@ -847,6 +847,9 @@ const Index = () => {
           />
         )}
 
+        <CookieSheet open={showCookieSheet} onClose={() => setShowCookieSheet(false)} />
+
+
       </div>
     </div>
   );
