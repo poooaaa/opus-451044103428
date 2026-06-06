@@ -46,6 +46,12 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
 
   const handleClick = useCallback(async () => {
     if (isPlaying || isLoading) return;
+    // Hard limit: skip videos longer than 10 minutes — don't even hit resolve endpoint.
+    const parts = (video.duration || "").split(":").map(Number);
+    let secs = 0;
+    if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
+    if (secs > 600) return;
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("resolve-video", {
@@ -62,7 +68,7 @@ const YouTubeCard = ({ video, onPlayStart, stopSignal }: YouTubeCardProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [isPlaying, isLoading, video.url]);
+  }, [isPlaying, isLoading, video.url, video.duration]);
 
   return (
     <div className="w-full animate-fade-in-up">

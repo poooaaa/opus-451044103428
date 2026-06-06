@@ -49,6 +49,8 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
   const readyRef = useRef(false);
   const pendingVideoRef = useRef<string | null>(null);
   const tickRef = useRef<number | null>(null);
+  const wasPlayingRef = useRef(false);
+  const userPausedRef = useRef(false);
   const onEndedRef = useRef(onEnded);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   onEndedRef.current = onEnded;
@@ -85,10 +87,18 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
             const YT = window.YT;
             if (!YT) return;
             if (e.data === YT.PlayerState.ENDED) {
+              wasPlayingRef.current = false;
               onEndedRef.current?.();
             }
             if (e.data === YT.PlayerState.PLAYING) {
+              wasPlayingRef.current = true;
               try { durationRef.current = playerRef.current.getDuration() || 0; } catch {}
+            }
+            if (e.data === YT.PlayerState.PAUSED) {
+              // If pause happens while tab hidden, browser/YT auto-paused — resume it.
+              if (document.hidden && wasPlayingRef.current && !userPausedRef.current) {
+                try { playerRef.current?.playVideo?.(); } catch {}
+              }
             }
           },
         },
@@ -106,9 +116,31 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     };
     tickRef.current = window.setTimeout(tick, 250);
 
+    // Keep audio alive when tab is hidden / window blurred — resume if YT auto-paused.
+    const resumeIfNeeded = () => {
+      if (!wasPlayingRef.current || userPausedRef.current) return;
+      try {
+        const YT = window.YT;
+        const state = playerRef.current?.getPlayerState?.();
+        if (YT && state !== undefined && state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
+          playerRef.current?.playVideo?.();
+        }
+      } catch {}
+    };
+    const onVisibility = () => { resumeIfNeeded(); };
+    const onBlur = () => { setTimeout(resumeIfNeeded, 200); };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", resumeIfNeeded);
+    const keepAlive = window.setInterval(resumeIfNeeded, 2000);
+
     return () => {
       cancelled = true;
       if (tickRef.current) clearTimeout(tickRef.current);
+      clearInterval(keepAlive);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", resumeIfNeeded);
       try { playerRef.current?.destroy?.(); } catch {}
       playerRef.current = null;
     };
@@ -120,6 +152,7 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
     load: async (videoId: string) => {
       currentTimeRef.current = 0;
       durationRef.current = 0;
+      userPausedRef.current = false;
       if (!readyRef.current || !playerRef.current) {
         pendingVideoRef.current = videoId;
         return;
@@ -127,15 +160,20 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
       try { playerRef.current.loadVideoById(videoId); } catch {}
     },
     play: async () => {
+      userPausedRef.current = false;
       try { playerRef.current?.playVideo?.(); } catch {}
     },
     pause: () => {
+      userPausedRef.current = true;
+      wasPlayingRef.current = false;
       try { playerRef.current?.pauseVideo?.(); } catch {}
     },
     unload: () => {
       currentTimeRef.current = 0;
       durationRef.current = 0;
       pendingVideoRef.current = null;
+      userPausedRef.current = true;
+      wasPlayingRef.current = false;
       try { playerRef.current?.stopVideo?.(); } catch {}
     },
   }), []);

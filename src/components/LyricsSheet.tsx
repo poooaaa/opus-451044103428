@@ -39,6 +39,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
   const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
   const [syncMode, setSyncMode] = useState(false);
   const [syncTimings, setSyncTimings] = useState<number[] | null>(null);
+  const [syncLines, setSyncLines] = useState<string[] | null>(null);
   const [isLoadingSync, setIsLoadingSync] = useState(false);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
   const [translateLabel, setTranslateLabel] = useState<null | "Id" | "En">(null);
@@ -54,6 +55,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
     setArtistSongs([]);
     setSyncMode(false);
     setSyncTimings(null);
+    setSyncLines(null);
     setCurrentLineIdx(-1);
     setTranslateLabel(null);
     setIsSwitchingLabel(false);
@@ -200,14 +202,18 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
       const synced: string | undefined = hit?.syncedLyrics;
       if (!synced) throw new Error("No synced lyrics");
       const times: number[] = [];
+      const lines: string[] = [];
       for (const raw of synced.split("\n")) {
         const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (!m) continue;
-        if (!m[3].trim()) continue; // skip blank-text timestamps to avoid the 1-line offset bug
+        const text = m[3].trim();
+        if (!text) continue; // skip blank-text timestamps to avoid line offset bugs
         times.push(parseInt(m[1], 10) * 60 + parseFloat(m[2]));
+        lines.push(text);
       }
       if (times.length === 0) throw new Error("No timings");
       setSyncTimings(times);
+      setSyncLines(lines);
       setSyncMode(true);
     } catch (e) {
       console.error("Sync lyrics error:", e);
@@ -271,33 +277,24 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              {syncMode ? (
+              {syncMode && syncLines ? (
                 <div className="pt-4">
-                  {(() => {
-                    const translatedLines = (showTranslated && translatedLyrics) ? translatedLyrics.split("\n") : null;
-                    return lyricLines.map((line, i) => {
-                      const trimmed = line.trim();
-                      const display = translatedLines && translatedLines[i] !== undefined ? translatedLines[i] : line;
-                      if (!trimmed) {
-                        return <div key={i} className="text-xs leading-relaxed">&nbsp;</div>;
-                      }
-                      const nbi = nonBlankIdxs.indexOf(i);
-                      const isActive = nbi === currentLineIdx;
-                      return (
-                        <div
-                          key={i}
-                          ref={isActive ? activeLineRef : undefined}
-                          className="text-xs leading-relaxed text-muted-foreground"
-                        >
-                          {isActive ? (
-                            <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{display}</span>
-                          ) : (
-                            display
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
+                  {syncLines.map((line, i) => {
+                    const isActive = i === currentLineIdx;
+                    return (
+                      <div
+                        key={i}
+                        ref={isActive ? activeLineRef : undefined}
+                        className="text-xs leading-relaxed text-muted-foreground py-0.5"
+                      >
+                        {isActive ? (
+                          <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{line}</span>
+                        ) : (
+                          line
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line pt-4">
