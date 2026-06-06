@@ -277,33 +277,24 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              {syncMode ? (
+              {syncMode && syncLines ? (
                 <div className="pt-4">
-                  {(() => {
-                    const translatedLines = (showTranslated && translatedLyrics) ? translatedLyrics.split("\n") : null;
-                    return lyricLines.map((line, i) => {
-                      const trimmed = line.trim();
-                      const display = translatedLines && translatedLines[i] !== undefined ? translatedLines[i] : line;
-                      if (!trimmed) {
-                        return <div key={i} className="text-xs leading-relaxed">&nbsp;</div>;
-                      }
-                      const nbi = nonBlankIdxs.indexOf(i);
-                      const isActive = nbi === currentLineIdx;
-                      return (
-                        <div
-                          key={i}
-                          ref={isActive ? activeLineRef : undefined}
-                          className="text-xs leading-relaxed text-muted-foreground"
-                        >
-                          {isActive ? (
-                            <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{display}</span>
-                          ) : (
-                            display
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
+                  {syncLines.map((line, i) => {
+                    const isActive = i === currentLineIdx;
+                    return (
+                      <div
+                        key={i}
+                        ref={isActive ? activeLineRef : undefined}
+                        className="text-xs leading-relaxed text-muted-foreground py-0.5"
+                      >
+                        {isActive ? (
+                          <span className="bg-black/30 rounded-md px-2 -mx-2 py-0.5">{line}</span>
+                        ) : (
+                          line
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground whitespace-pre-line pt-4">
