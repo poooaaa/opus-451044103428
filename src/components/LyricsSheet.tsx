@@ -297,7 +297,7 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
                         ref={isActive ? activeLineRef : undefined}
                       >
                         {isActive ? (
-                          <span className="bg-foreground/10 rounded-md px-2 -mx-2">{line}</span>
+                          <span className="bg-black/30 rounded-md px-2 -mx-2">{line}</span>
                         ) : (
                           line
                         )}
