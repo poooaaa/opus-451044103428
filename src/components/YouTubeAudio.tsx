@@ -51,6 +51,7 @@ const YouTubeAudio = forwardRef<YTAudioHandle, Props>(({ onEnded, onTimeUpdate }
   const tickRef = useRef<number | null>(null);
   const wasPlayingRef = useRef(false);
   const userPausedRef = useRef(false);
+  const playWaitersRef = useRef<Array<() => void>>([]);
   const onEndedRef = useRef(onEnded);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   onEndedRef.current = onEnded;
