@@ -85,6 +85,7 @@ const Index = () => {
   // Auth state
   const [user, setUser] = useState<any>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [showCookieSheet, setShowCookieSheet] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
   // Theme - always dark
