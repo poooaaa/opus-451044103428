@@ -279,9 +279,10 @@ const LyricsSheet = ({ lyrics, isVisible, onClose, trackTitle, trackArtist, audi
         <div className="bg-muted h-full overflow-y-auto overscroll-contain border-x border-border px-6 pb-20">
           {lyrics ? (
             <>
-              {syncMode && syncLines ? (
+              {syncMode && syncTimings ? (
                 <div className="pt-4">
-                  {syncLines.map((line, i) => {
+                  {nonBlankIdxs.map((origIdx, i) => {
+                    const line = lyricLines[origIdx];
                     const isActive = i === currentLineIdx;
                     return (
                       <div
