@@ -372,43 +372,67 @@ const Index = () => {
     try {
       const cleanTitle = track.title.replace(/^.+\s-\s/, "").trim();
       const artist = (track.artist || "").trim();
-      const query = `lagu ${artist} ${cleanTitle} audio`.trim();
-      const { data, error } = await supabase.functions.invoke("youtube-search", {
-        body: { query },
-      });
-      if (error) return null;
-      const items: any[] = data?.items || [];
-      if (items.length === 0) return null;
-
       const trackDurationSeconds = track.duration_ms > 0 ? track.duration_ms / 1000 : null;
-
-      // Score by matching tokens in title + duration closeness
       const ref = `${artist} ${cleanTitle}`.toLowerCase();
       const words = ref.split(/\s+/).filter((w) => w.length > 2);
-      const scored = items.map((it) => {
-        const t = (it.title || "").toLowerCase();
-        const matches = words.filter((w) => t.includes(w)).length;
-        const durationSeconds = extractYouTubeDurationSeconds(it);
-        const durationDiff = trackDurationSeconds == null || durationSeconds == null
-          ? Number.POSITIVE_INFINITY
-          : Math.abs(durationSeconds - trackDurationSeconds);
+      const queries = [
+        `lagu ${artist} ${cleanTitle} audio`,
+        `lagu ${artist} ${cleanTitle}`,
+        `${artist} ${cleanTitle} official audio`,
+        `${artist} ${cleanTitle} audio`,
+      ].map((query) => query.trim()).filter(Boolean);
 
-        return {
-          it,
-          score: matches,
-          durationDiff,
-          withinTolerance: durationDiff <= 1,
-        };
-      }).sort((a, b) => {
-        if (a.withinTolerance !== b.withinTolerance) return a.withinTolerance ? -1 : 1;
-        if (a.durationDiff !== b.durationDiff) return a.durationDiff - b.durationDiff;
-        return b.score - a.score;
-      });
+      let bestCandidate: { id: string | null; durationDiff: number; score: number } | null = null;
 
-      const strictDurationMatch = scored.find((item) => item.withinTolerance);
-      if (strictDurationMatch) return strictDurationMatch.it?.id || null;
+      for (const query of queries) {
+        const { data, error } = await supabase.functions.invoke("youtube-search", {
+          body: { query },
+        });
+        if (error) continue;
 
-      return scored[0]?.it?.id || items[0]?.id || null;
+        const items: any[] = data?.items || [];
+        if (items.length === 0) continue;
+
+        const scored = items.map((it) => {
+          const title = (it.title || "").toLowerCase();
+          const matches = words.filter((w) => title.includes(w)).length;
+          const durationSeconds = extractYouTubeDurationSeconds(it);
+          const durationDiff = trackDurationSeconds == null || durationSeconds == null
+            ? Number.POSITIVE_INFINITY
+            : Math.abs(durationSeconds - trackDurationSeconds);
+
+          return {
+            it,
+            score: matches,
+            durationDiff,
+            withinTolerance: durationDiff <= 1,
+          };
+        }).sort((a, b) => {
+          if (a.withinTolerance !== b.withinTolerance) return a.withinTolerance ? -1 : 1;
+          if (a.durationDiff !== b.durationDiff) return a.durationDiff - b.durationDiff;
+          return b.score - a.score;
+        });
+
+        const strictDurationMatch = scored.find((item) => item.withinTolerance);
+        if (strictDurationMatch) return strictDurationMatch.it?.id || null;
+
+        const candidate = scored[0];
+        if (!candidate) continue;
+
+        if (
+          !bestCandidate ||
+          candidate.durationDiff < bestCandidate.durationDiff ||
+          (candidate.durationDiff === bestCandidate.durationDiff && candidate.score > bestCandidate.score)
+        ) {
+          bestCandidate = {
+            id: candidate.it?.id || null,
+            durationDiff: candidate.durationDiff,
+            score: candidate.score,
+          };
+        }
+      }
+
+      return bestCandidate?.id || null;
     } catch {
       return null;
     }
